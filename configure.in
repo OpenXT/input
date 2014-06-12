@@ -1,0 +1,215 @@
+dnl
+dnl
+dnl configure.in.head:
+dnl
+dnl Copyright (c) 2009 James McKenzie <20@madingley.org>,
+dnl All rights reserved.
+dnl
+dnl $Id:$
+dnl
+dnl $Log:$
+dnl
+dnl
+dnl
+AC_PREREQ(2.13)
+AC_INIT(main.c)
+
+AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
+AC_PROG_RANLIB
+
+AC_SYS_LARGEFILE
+
+PKG_CHECK_MODULES([DBUS],[dbus-1])
+PKG_CHECK_MODULES([DBUS_GLIB],[dbus-glib-1])
+PKG_CHECK_MODULES([LIBXCDBUS],[libxcdbus])
+PKG_CHECK_MODULES([UDEV],[libudev])
+PKG_CHECK_MODULES([LIBXCXENSTORE],[libxcxenstore])
+
+INPUT_MAJOR_VERSION=1
+INPUT_MINOR_VERSION=0
+INPUT_MICRO_VERSION=1
+
+
+INPUT_VERSION=$INPUT_MAJOR_VERSION.$INPUT_MINOR_VERSION.$INPUT_MICRO_VERSION
+
+AC_SUBST(INPUT_MAJOR_VERSION)
+AC_SUBST(INPUT_MINOR_VERSION)
+AC_SUBST(INPUT_MICRO_VERSION)
+AC_SUBST(INPUT_VERSION)
+
+
+VERSION=$INPUT_VERSION
+PACKAGE=input
+
+AM_INIT_AUTOMAKE($PACKAGE,$VERSION)
+
+AC_ARG_WITH(idldir,AC_HELP_STRING([--with-idldir=PATH],[Path to dbus idl desription files]),
+                IDLDIR=$with_idldir,IDLDIR=/usr/share/idl)
+
+AC_SUBST(IDLDIR)
+AC_SUBST(RPCGEN_TEMPLATES)
+
+AC_CHECK_PROG(XC_RPCGEN,xc-rpcgen,xc-rpcgen)
+
+AC_CHECK_PROG(CPROTO,cproto,cproto)
+AM_CONFIG_HEADER(config.h)
+
+# Checks for header files.
+AC_CHECK_HEADERS([malloc.h])
+AC_HEADER_STDC
+AC_FUNC_MALLOC
+
+AC_C_INLINE
+AC_C_CONST
+
+
+AC_ARG_WITH(libxc,
+            AC_HELP_STRING([--with-libxc=PATH],
+                           [Path to prefix where where libxc and xen were installed]),
+            LIBXC_PREFIX=$with_libxc, [])
+
+case "x$LIBXC_PREFIX" in
+        x|xno)
+                LIBXC_INC=""
+                LIBXC_LIB="-lxenctrl"
+                ;;
+        xyes)
+                LIB_SWITCH="xenctrl"
+                LIBXC_INC=""
+                LIBXC_LIB="-lxenctrl"
+                ;;
+        *)
+                LIB_SWITCH="xenctrl"
+                LIBXC_INC="-I${LIBXC_PREFIX}/include"
+                LIBXC_LIB="-L${LIBXC_PREFIX}/lib -lxenctrl"
+                ;;
+esac
+
+AC_SUBST(LIBXC_INC)
+AC_SUBST(LIBXC_LIB)
+
+have_libxenctrl=true
+
+ORIG_LDFLAGS="${LDFLAGS}"
+ORIG_CPPFLAGS="${CPPFLAGS}"
+        LDFLAGS="${LDFLAGS} ${LIBXC_LIB}"
+        CPPFLAGS="${CPPFLAGS} ${LIBXC_INC}"
+        AC_CHECK_HEADERS([xenctrl.h], [], [have_libxenctrl=false])
+        AC_CHECK_FUNC(xc_version, [], [have_libxenctrl=false])
+        AS_IF([test "x$have_libxenctrl" = "xtrue"],
+              [AC_MSG_WARN(going with libxc)
+               AC_DEFINE([HAVE_XENCTRL_H], [1],
+                         [Define to 1 if you link with an existing version of libxc])],
+              [AC_MSG_ERROR(didnt find sufficiently recent xenctrl)])
+LDFLAGS="${ORIG_LDFLAGS}"
+CPPFLAGS="${ORIG_CPPFLAGS}"
+
+# libv4v
+
+AC_ARG_WITH([libv4v],
+ AC_HELP_STRING([--with-libv4v=PATH], [Path to prefix where libv4v was installed.]),
+ [LIBV4V_PREFIX=$with_libv4v], [])
+
+case "x$LIBV4V_PREFIX" in
+ x|xno|xyes)
+ LIBV4V_INC=""
+ LIBV4V_LIB="-lv4v"
+ ;;
+ *)
+ LIBV4V_INC="-I${LIBV4V_PREFIX}/include"
+ LIBV4V_LIB="-L${LIBV4V_PREFIX}/lib -lv4v"
+ ;;
+esac
+
+AC_SUBST(LIBV4V_INC)
+AC_SUBST(LIBV4V_LIB)
+
+have_libv4v=true
+
+ORIG_LDFLAGS="${LDFLAGS}"
+ORIG_CPPFLAGS="${CPPFLAGS}"
+ LDFLAGS="${LDFLAGS} ${LIBV4V_LIB}"
+ CPPFLAGS="${CPPFLAGS} ${LIBV4V_INC}"
+ AC_CHECK_HEADERS([libv4v.h], [], [have_libv4v=false])
+ AC_CHECK_FUNC(v4v_socket, [], [have_libv4v=false])
+LDFLAGS="${ORIG_LDFLAGS}"
+CPPFLAGS="${ORIG_CPPFLAGS}"
+
+if test "x$have_libv4v" = "xfalse"; then
+ AC_MSG_ERROR([where is libv4v dude])
+fi
+
+
+# libdmbus
+
+AC_ARG_WITH([libdmbus],
+ AC_HELP_STRING([--with-libdmbus=PATH], [Path to prefix where libdmbus was installed.]),
+ [LIBDMBUS_PREFIX=$with_libdmbus], [])
+
+case "x$LIBDMBUS_PREFIX" in
+ x|xno|xyes)
+ LIBDMBUS_INC=""
+ LIBDMBUS_LIB="-ldmbus"
+ ;;
+ *)
+ LIBDMBUS_INC="-I${LIBDMBUS_PREFIX}/include"
+ LIBDMBUS_LIB="-L${LIBDMBUS_PREFIX}/lib -ldmbus"
+ ;;
+esac
+
+AC_SUBST(LIBDMBUS_INC)
+AC_SUBST(LIBDMBUS_LIB)
+
+have_libdmbus=true
+
+ORIG_LDFLAGS="${LDFLAGS}"
+ORIG_CPPFLAGS="${CPPFLAGS}"
+ LDFLAGS="${LDFLAGS} ${LIBV4V_LIB} ${LIBDMBUS_LIB}"
+ CPPFLAGS="${CPPFLAGS} ${LIBV4V_INC} ${LIBDMBUS_INC}"
+ AC_CHECK_HEADERS([libdmbus.h], [], [have_libdmbus=false])
+ AC_CHECK_FUNC(dmbus_init, [], [have_libdmbus=false])
+LDFLAGS="${ORIG_LDFLAGS}"
+CPPFLAGS="${ORIG_CPPFLAGS}"
+
+if test "x$have_libdmbus" = "xfalse"; then
+ AC_MSG_ERROR([where is libdmbus dude])
+fi
+
+
+# libxenbackend
+
+LIBXENBACKEND_CONFIG=no
+AC_ARG_WITH(libxenbackend,
+        AC_HELP_STRING([--with-libxenbackend=PATH],[Path to libxenbackend-config]),
+                LIBXENBACKEND_CONFIG=$with_libxenbackend,LIBXENBACKEND_CONFIG=no)
+
+case "x$LIBXENBACKEND_CONFIG" in
+        xno)
+		AC_PATH_PROG(LIBXENBACKEND_CONFIG, libxenbackend-config, no)
+        ;;
+        x|xyes)
+		AC_PATH_PROG(LIBXENBACKEND_CONFIG, libxenbackend-config, no)
+        ;;
+        *)
+        ;;
+esac
+
+if ! test -x $LIBXENBACKEND_CONFIG; then
+  PKG_CHECK_MODULES([LIBXENBACKEND], [libxenbackend])
+  LIBXENBACKEND_INC="$LIBXENBACKEND_CFLAGS"
+  LIBXENBACKEND_LIB="$LIBXENBACKEND_LIBS"
+else
+  LIBXENBACKEND_INC=`$LIBXENBACKEND_CONFIG --cflags`
+  LIBXENBACKEND_LIB=`$LIBXENBACKEND_CONFIG --libs`
+fi
+
+AC_SUBST(LIBXENBACKEND_INC)
+AC_SUBST(LIBXENBACKEND_LIB)
+
+
+
+AC_OUTPUT([Makefile])
