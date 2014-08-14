@@ -709,8 +709,8 @@ static void domain_calculate_abs_scaling(const char *path, void *opaque)
     if (d == NULL || path == NULL)
         return;
 
-    d->rel_x_mult = REL_MULT;
-    d->rel_y_mult = REL_MULT;
+    d->rel_x_mult = MAX_MOUSE_ABS_X / DEFAULT_RESOLUTION_X;
+    d->rel_y_mult = MAX_MOUSE_ABS_Y / DEFAULT_RESOLUTION_Y;
 
     buff = xenstore_read(path);
     if (!buff || strlen(buff) == 0)
@@ -734,8 +734,8 @@ static void domain_calculate_abs_scaling(const char *path, void *opaque)
     info("Found valid desktopDimensions node for domain %d, xres is %d, yres is %d", d->domid, xres, yres);
     free(buff);
 
-    d->rel_x_mult = (double) MOUSE_REL_MULT_DIVIDEND / (double) xres;
-    d->rel_y_mult = (double) MOUSE_REL_MULT_DIVIDEND / (double) yres;
+    d->rel_x_mult = (double) MAX_MOUSE_ABS_X / (double) xres;
+    d->rel_y_mult = (double) MAX_MOUSE_ABS_Y / (double) yres;
 
     /* If the desktop dimensions have changed, need to adjust the mouse position. */
     input_domain_handle_resolution_change(d, xres, yres);
@@ -801,7 +801,8 @@ static void switcher_domid(struct domain *d, uint32_t domid)
           warning("failed to install xenstore watch! switcher/command");
 
 
-  d->rel_x_mult = d->rel_y_mult = REL_MULT;
+  d->rel_x_mult = MAX_MOUSE_ABS_X / DEFAULT_RESOLUTION_X;
+  d->rel_y_mult = MAX_MOUSE_ABS_Y / DEFAULT_RESOLUTION_Y;
   d->desktop_xres = d->desktop_yres = 0;
   if (!xenstore_dom_watch(d->domid, domain_calculate_abs_scaling, d, "attr/desktopDimensions"))
           warning("failed to install xenstore watch! attr/desktopDimensions");
