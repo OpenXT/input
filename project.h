@@ -112,12 +112,9 @@
 #define MIN_MOUSE_ABS_Y 0
 #define MAX_MOUSE_ABS_Y 0x7fff
 
-/* Default multiplier used for converting relative events to absolute. */
-#define REL_MULT 50
-
-/* A number to divide the resolutions by, so that we get a decent default mouse
-   speed when converting relative events to absolute. */
-#define MOUSE_REL_MULT_DIVIDEND 30000
+/* The default resolution to use when the VM doesn't report any */
+#define DEFAULT_RESOLUTION_X	1920
+#define DEFAULT_RESOLUTION_Y	1080
 
 /* A dividend at which pixel precision works well when converting relative
    events to absolute. We have two thresholds, one for slow moves, the other
