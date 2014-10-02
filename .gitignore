@@ -72,3 +72,5 @@ modules.order
 input_client
 input_server
 rpcgen
+Makefile
+cscope.out
