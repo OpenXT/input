@@ -365,6 +365,10 @@ void domain_gone(struct domain *d)
     else
         info ("cleaning up in fork domain %d", d->domid);
 
+    if (d->vkbd_backend) {
+        xen_vkbd_backend_release(d);
+    }
+
     release_xs_watches(d);
 
     if (d->is_pvm && d->sstate != 0)
