@@ -256,6 +256,7 @@ void pm_init(void);
 /* xen_vkbd.c */
 void xen_vkbd_send_event(struct domain *d, struct input_event *event);
 void xen_vkbd_backend_create(struct domain *d);
+void xen_vkbd_backend_release(struct domain *d);
 void xen_backend_init(int dom0);
 void xen_backend_close(void);
 /* xen_event.c */

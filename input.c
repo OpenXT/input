@@ -1452,39 +1452,30 @@ static double get_mouse_speed_mult(struct input_event *e, enum input_device_type
 
 static void input_track_mouse_position(struct input_event *e, enum input_device_type input_type)
 {
-    int xres, yres;
-
-    if (mouse_dest->desktop_xres == 0)
-      xres = DEFAULT_RESOLUTION_X;
-    else
-      xres = mouse_dest->desktop_xres;
-
-    if (mouse_dest->desktop_yres == 0)
-      yres = DEFAULT_RESOLUTION_Y;
-    else
-      yres = mouse_dest->desktop_yres;
-
     /* Don't track mouse position if mouse_dest is NULL. */
-    if (e->type == EV_REL && mouse_dest != NULL)
-    {
-        switch (e->code)
-        {
-        case REL_X:
-            if (input_type == HID_TYPE_TOUCHPAD)
-                mouse_x += e->value * (MAX_MOUSE_ABS_X / xres);
-            else
-                mouse_x += e->value * mouse_dest->rel_x_mult * get_mouse_speed_mult(e, input_type);
+    if (mouse_dest) {
+        int xres = mouse_dest->desktop_xres ? mouse_dest->desktop_xres : DEFAULT_RESOLUTION_X;
+        int yres = mouse_dest->desktop_yres ? mouse_dest->desktop_yres : DEFAULT_RESOLUTION_Y;
 
-            force_range(&mouse_x, MIN_MOUSE_ABS_X, MAX_MOUSE_ABS_X);
-            break;
-        case REL_Y:
-            if (input_type == HID_TYPE_TOUCHPAD)
-                mouse_y += e->value * (MAX_MOUSE_ABS_Y / yres);
-            else
-                mouse_y += e->value * mouse_dest->rel_y_mult * get_mouse_speed_mult(e, input_type);
+        if (e->type == EV_REL) {
+            switch (e->code) {
+            case REL_X:
+                if (input_type == HID_TYPE_TOUCHPAD)
+                    mouse_x += e->value * (MAX_MOUSE_ABS_X / xres);
+                else
+                    mouse_x += e->value * mouse_dest->rel_x_mult * get_mouse_speed_mult(e, input_type);
 
-            force_range(&mouse_y, MIN_MOUSE_ABS_Y, MAX_MOUSE_ABS_Y);
-            break;
+                force_range(&mouse_x, MIN_MOUSE_ABS_X, MAX_MOUSE_ABS_X);
+                break;
+            case REL_Y:
+                if (input_type == HID_TYPE_TOUCHPAD)
+                    mouse_y += e->value * (MAX_MOUSE_ABS_Y / yres);
+                else
+                    mouse_y += e->value * mouse_dest->rel_y_mult * get_mouse_speed_mult(e, input_type);
+
+                force_range(&mouse_y, MIN_MOUSE_ABS_Y, MAX_MOUSE_ABS_Y);
+                break;
+            }
         }
     }
 

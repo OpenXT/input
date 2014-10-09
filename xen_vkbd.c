@@ -189,6 +189,15 @@ xen_vkbd_backend_create(struct domain *d)
     d->vkbd_backend = backend;
 }
 
+void
+xen_vkbd_backend_release(struct domain *d)
+{
+    // Will trigger the disconnect callback on every device bound to this backend
+    // and free(3) backend->backend.
+    backend_release(d->vkbd_backend->backend);
+    d->vkbd_backend = NULL;
+}
+
 
 /* Backend init functions */
 
