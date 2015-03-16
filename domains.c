@@ -749,6 +749,70 @@ static void domain_calculate_abs_scaling(const char *path, void *opaque)
 }
 
 
+/**
+ *  Returns a non-zero value if this slot is occuped by a left-over domain.
+ *
+ */
+static int slot_occupied_by_dead_domain(int slot)
+{
+    int dying, ret;
+    xc_dominfo_t info;
+    char * reported_domid;
+
+    struct domain * d;
+
+    //If we've been passed the special slot -1, vacuously return false;
+    //this is an indication that a domain has no real slot (and thus can't
+    //occupy a slot).
+    if(slot == -1) {
+        return 0;
+    }
+
+    d = domain_with_slot(slot);
+
+    //If no domain occupies this slot, it can't be occupied by a dead one.
+    if(!d) {
+        return 0;
+    }
+
+
+    //Ask xen for information about the domain...
+    ret = xc_domain_getinfo(xc_handle, d->domid, 1, &info);
+
+    //If the domain doesn't exist, according to Xen, we've stumbled
+    //upon a left-over dead record!
+    if(ret != 1) {
+        return 1;
+    }
+
+    //Otherwise, we'll have to employ an ugly heuristic to see if
+    //the toolstack has tried (and failed!) to destroy the VM.
+    //
+    //If you see a way to improve this heuristic, by all means, do!
+    //Current heuristic:
+    //
+    //- If the domain is marked as /dying/, we've started the process
+    //  of killing it; and
+    //- If the domain's record has been purged from the Xenstore, its
+    //  cleanup is either done or no longer possible.
+    //
+    //If both conditions are met, we've found a dead-in-all-but-name-VM.
+    //
+    reported_domid = xenstore_dom_read(d->domid, "domid");
+
+    //If we've obtained a domid from the xenstore, this domain still has
+    //a xenstore record, and likely is not yet dead.
+    if(reported_domid) {
+      free(reported_domid);
+      return 0;
+    }
+
+    //Otherwise, we'll return the dying status-- as this will tell us
+    //if the domain is all-but-dead, as defined above.
+    return info.dying;
+}
+
+
 static void switcher_domid(struct domain *d, uint32_t domid)
 {
   char perm[8];
@@ -771,6 +835,20 @@ static void switcher_domid(struct domain *d, uint32_t domid)
   domain_read_is_pv_domain(d);
 
   slot = domain_read_slot(d);
+
+  // Ensures that no "zombie" domains are taking up valuable switcher slots.
+  // Ideally, this shouldn't be necessary-- but in development environments
+  // it's possible for interesting things to happen (e.g. for a developer to
+  // destroy a stub-domain without giving us notice of the termination.)
+
+  // This safeguard function isn't strictly neccessary, but it's lightweight
+  // and prevents some awful behavior (including huge delays) if developers do
+  // manage to do fun things like kernel panic their stubdomains.
+  if(slot_occupied_by_dead_domain(slot))
+  {
+      warning("slot %d is held by a dead domain; cleaning up", slot);
+      domain_gone(domain_with(slot, &slot));
+  }
 
   if (domain_with(slot,&slot) || (slot == -1))
   {
