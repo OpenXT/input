@@ -976,6 +976,12 @@ void handle_switcher_shutdown(void *priv, struct msg_switcher_shutdown *msg, siz
   warning("not reached");
 }
 
+static void send_wakeup(struct domain *d)
+{
+    struct msg_input_wakeup msg;
+    input_wakeup(d->client, &msg, sizeof(msg));
+}
+
 void domain_wake_from_s3(struct domain *d)
 {
     unsigned long s_state = 0;
@@ -998,6 +1004,7 @@ void domain_wake_from_s3(struct domain *d)
             xc_set_hvm_param(xc_handle, d->domid, HVM_PARAM_ACPI_S_STATE, 0);
         d->is_in_s3 = 0;
         d->sstate = 5;
+        send_wakeup(d);
     } else {
         error("Failed to open xen control interface");
     }
