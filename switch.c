@@ -17,7 +17,7 @@
  */
 
 #include "project.h"
-
+#include "rpcgen/xenmgr_client.h"
 
 static struct domain *current, *surface_current;
 
@@ -373,6 +373,20 @@ static int report_window_shown()
     return r;
 }
 
+static gboolean
+switcher_status_report_enabled(void)
+{
+    gboolean enabled = TRUE;
+
+    if (!property_get_com_citrix_xenclient_xenmgr_config_ui_switcher_status_report_enabled_(
+                    xcbus_conn, "com.citrix.xenclient.xenmgr", "/", &enabled)) {
+        warning("failed to get status report property!");
+        return TRUE;
+    }
+
+    return enabled;
+}
+
 static int switcher_status_report (void *opaque)
 {
   char path[256];
@@ -380,6 +394,8 @@ static int switcher_status_report (void *opaque)
   if (!d)
     return 0;
   if (auth_window_shown() || report_window_shown())
+    return 0;
+  if (!switcher_status_report_enabled())
     return 0;
 
   sprintf(path, "/local/domain/%d/report/state", d->domid);
