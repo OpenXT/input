@@ -163,9 +163,9 @@ static struct usb_descriptor_header *hidg_fs_descriptors[] = {
 /* Feature request support */
 
 static struct feature_report {
-  char feature;
-  char value;
-} __attribute__ ((__packed__));
+	char feature;
+	char value;
+};
 
 /*-------------------------------------------------------------------------*/
 /*                              Char Device                                */
@@ -376,7 +376,7 @@ static int hidg_setup(struct usb_function *f,
 	struct usb_request		*req  = cdev->req;
 	int status = 0;
 	__u16 value, length;
-        struct feature_report feature;
+	struct feature_report feature;
 
 	value	= __le16_to_cpu(ctrl->wValue);
 	length	= __le16_to_cpu(ctrl->wLength);
@@ -389,25 +389,25 @@ static int hidg_setup(struct usb_function *f,
 		  | HID_REQ_GET_REPORT):
 		VDBG(cdev, "get_report\n");
 
-                if ((value & 0xFF) == 0x10)
-                {
-                        /* All right... We just received feature request 0x10 */
-                        /* Right now there's no system for handling feature requests */
-                        /* But Windows 8 needs an answer to that. */
-                        /* It won't work without knowing how many fingers we handle. */
-                        /* The device we "emulate" here is the Samsung Slate 7, which handles 8 fingers */
-                        /* Let's reply that we do the same! */
-                        feature.feature = 0x10;
-                        feature.value = 0x08;
-                        length = 2;
-                        memcpy(req->buf, &feature, length);
-                }
-                else
-                {
-                        /* send an empty report */
-                        length = min_t(unsigned, length, hidg->report_length);
-                        memset(req->buf, 0x0, length);
-                }
+		if ((value & 0xFF) == 0x10)
+		{
+			/* All right... We just received feature request 0x10 */
+			/* Right now there's no system for handling feature requests */
+			/* But Windows 8 needs an answer to that. */
+			/* It won't work without knowing how many fingers we handle. */
+			/* The device we "emulate" here is the Samsung Slate 7, which handles 8 fingers */
+			/* Let's reply that we do the same! */
+			feature.feature = 0x10;
+			feature.value = 0x08;
+			length = 2;
+			memcpy(req->buf, &feature, length);
+		}
+		else
+		{
+			/* send an empty report */
+			length = min_t(unsigned, length, hidg->report_length);
+			memset(req->buf, 0x0, length);
+		}
 
 		goto respond;
 		break;

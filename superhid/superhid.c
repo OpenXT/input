@@ -44,7 +44,14 @@ struct hidg_func_node {
 	struct hidg_func_descriptor *func;
 };
 
+struct hidg_device_node {
+	struct list_head node;
+	struct platform_device *dev;
+};
+
 static LIST_HEAD(hidg_func_list);
+
+static LIST_HEAD(hidg_devices);
 
 /*-------------------------------------------------------------------------*/
 USB_GADGET_COMPOSITE_OPTIONS();
@@ -255,89 +262,89 @@ MODULE_LICENSE("GPL");
 
 /* This is a relative mouse with 5 buttons and a vertical wheel. */
 #define MOUSE								\
-  0x05, 0x01,                   /* USAGE_PAGE (Generic Desktop)     */	\
-    0x09, 0x02,                 /* USAGE (Mouse)                    */	\
-    0xa1, 0x01,                 /* COLLECTION (Application)         */	\
-    0x85, REPORT_ID_MOUSE,      /*   REPORT_ID (2)                  */	\
-    0x09, 0x01,                 /*   USAGE (Pointer)                */	\
-    0xa1, 0x00,                 /*   COLLECTION (Physical)          */	\
-    0x05, 0x09,                 /*     USAGE_PAGE (Button)          */	\
-    0x19, 0x01,                 /*     USAGE_MINIMUM (Button 1)     */	\
-    0x29, 0x05,                 /*     USAGE_MAXIMUM (Button 5)     */	\
-    0x15, 0x00,                 /*     LOGICAL_MINIMUM (0)          */	\
-    0x25, 0x01,                 /*     LOGICAL_MAXIMUM (1)          */	\
-    0x95, 0x05,                 /*     REPORT_COUNT (5)             */	\
-    0x75, 0x01,                 /*     REPORT_SIZE (1)              */	\
-    0x81, 0x02,                 /*     INPUT (Data,Var,Abs)         */	\
-    0x95, 0x01,                 /*     REPORT_COUNT (1)             */	\
-    0x75, 0x03,                 /*     REPORT_SIZE (3)              */	\
-    0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */	\
-    0x05, 0x01,                 /*     USAGE_PAGE (Generic Desktop) */	\
-    0x09, 0x30,                 /*     USAGE (X)                    */	\
-    0x09, 0x31,                 /*     USAGE (Y)                    */	\
-    0x09, 0x38,                 /*     USAGE (Z)                    */	\
-    0x15, 0x81,                 /*     LOGICAL_MINIMUM (-127)       */	\
-    0x25, 0x7f,                 /*     LOGICAL_MAXIMUM (127)        */	\
-    0x75, 0x08,                 /*     REPORT_SIZE (8)              */	\
-    0x95, 0x03,                 /*     REPORT_COUNT (3)             */	\
-    0x81, 0x06,                 /*     INPUT (Data,Var,Rel)         */	\
-    0x95, 0x01,                 /*     REPORT_COUNT (1)             */	\
-    0x75, 0x08,                 /*     REPORT_SIZE (8)              */	\
-    0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */	\
-    0xc0,                       /*   END_COLLECTION                 */	\
-    0xc0                        /* END_COLLECTION                   */
+	0x05, 0x01,                   /* USAGE_PAGE (Generic Desktop)     */ \
+		0x09, 0x02,                 /* USAGE (Mouse)                    */ \
+		0xa1, 0x01,                 /* COLLECTION (Application)         */ \
+		0x85, REPORT_ID_MOUSE,      /*   REPORT_ID (2)                  */ \
+		0x09, 0x01,                 /*   USAGE (Pointer)                */ \
+		0xa1, 0x00,                 /*   COLLECTION (Physical)          */ \
+		0x05, 0x09,                 /*     USAGE_PAGE (Button)          */ \
+		0x19, 0x01,                 /*     USAGE_MINIMUM (Button 1)     */ \
+		0x29, 0x05,                 /*     USAGE_MAXIMUM (Button 5)     */ \
+		0x15, 0x00,                 /*     LOGICAL_MINIMUM (0)          */ \
+		0x25, 0x01,                 /*     LOGICAL_MAXIMUM (1)          */ \
+		0x95, 0x05,                 /*     REPORT_COUNT (5)             */ \
+		0x75, 0x01,                 /*     REPORT_SIZE (1)              */ \
+		0x81, 0x02,                 /*     INPUT (Data,Var,Abs)         */ \
+		0x95, 0x01,                 /*     REPORT_COUNT (1)             */ \
+		0x75, 0x03,                 /*     REPORT_SIZE (3)              */ \
+		0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */ \
+		0x05, 0x01,                 /*     USAGE_PAGE (Generic Desktop) */ \
+		0x09, 0x30,                 /*     USAGE (X)                    */ \
+		0x09, 0x31,                 /*     USAGE (Y)                    */ \
+		0x09, 0x38,                 /*     USAGE (Z)                    */ \
+		0x15, 0x81,                 /*     LOGICAL_MINIMUM (-127)       */ \
+		0x25, 0x7f,                 /*     LOGICAL_MAXIMUM (127)        */ \
+		0x75, 0x08,                 /*     REPORT_SIZE (8)              */ \
+		0x95, 0x03,                 /*     REPORT_COUNT (3)             */ \
+		0x81, 0x06,                 /*     INPUT (Data,Var,Rel)         */ \
+		0x95, 0x01,                 /*     REPORT_COUNT (1)             */ \
+		0x75, 0x08,                 /*     REPORT_SIZE (8)              */ \
+		0x81, 0x03,                 /*     INPUT (Cnst,Var,Abs)         */ \
+		0xc0,                       /*   END_COLLECTION                 */ \
+		0xc0                        /* END_COLLECTION                   */
 
 struct hidg_func_descriptor my_hid_data = {
-  .subclass= 0, /* No subclass */
-  .protocol= 0,
-  .report_length= 8,
-  .report_desc_length= 144,
-  /* Length without the mouse: */
-  /* .report_desc_length= 84, */
-  .report_desc= {
-    MOUSE,
-    0x05, 0x0D,         /*  Usage Page (Digitizer),             */
-    0x09, 0x04,         /*  Usage (Touchscreen),                */
-    0xA1, 0x01,         /*  Collection (Application),           */
-    0x85, REPORT_ID_MULTITOUCH, /* Report ID (4),               */
-    0x09, 0x22,         /*      Usage (Finger),                 */
-    0xA1, 0x00,         /*      Collection (Physical),          */
-    0x09, 0x42,         /*          Usage (Tip Switch),         */
-    0x15, 0x00,         /*          Logical Minimum (0),        */
-    0x25, 0x01,         /*          Logical Maximum (1),        */
-    0x75, 0x01,         /*          Report Size (1),            */
-    0x95, 0x01,         /*          Report Count (1),           */
-    0x81, 0x02,         /*          Input (Variable),           */
-    0x09, 0x32,         /*          Usage (In Range),           */
-    0x81, 0x02,         /*          Input (Variable),           */
-    0x09, 0x37,         /*          Usage (Data Valid),         */
-    0x81, 0x02,         /*          Input (Variable),           */
-    0x25, 0x1F,         /*          Logical Maximum (31),       */
-    0x75, 0x05,         /*          Report Size (5),            */
-    0x09, 0x51,         /*          Usage (51h),                */
-    0x81, 0x02,         /*          Input (Variable),           */
-    0x05, 0x01,         /*          Usage Page (Desktop),       */
-    0x55, 0x0E,         /*          Unit Exponent (14),         */
-    0x65, 0x11,         /*          Unit (Centimeter),          */
-    0x35, 0x00,         /*          Physical Minimum (0),       */
-    0x75, 0x10,         /*          Report Size (16),           */
-    0x46, 0x56, 0x0A,   /*          Physical Maximum (2646),    */
-    0x26, 0xFF, 0x0F,   /*          Logical Maximum (4095),     */
-    0x09, 0x30,         /*          Usage (X),                  */
-    0x81, 0x02,         /*          Input (Variable),           */
-    0x46, 0xB2, 0x05,   /*          Physical Maximum (1458),    */
-    0x26, 0xFF, 0x0F,   /*          Logical Maximum (4095),     */
-    0x09, 0x31,         /*          Usage (Y),                  */
-    0x81, 0x02,         /*          Input (Variable),           */
-    0x05, 0x0D,         /*          Usage Page (Digitizer),     */
-    0x75, 0x08,         /*          Report Size (8),            */
-    0x85, REPORT_ID_MT_MAX_COUNT, /* Report ID (10),            */
-    0x09, 0x55,         /*          Usage (55h),                */
-    0x25, 0x10,         /*          Logical Maximum (16),       */
-    0xB1, 0x02,         /*          Feature (Variable),         */
-    0xC0,               /*      End Collection,                 */
-    0xC0                /*  End Collection                      */
-  }
+	.subclass= 0, /* No subclass */
+	.protocol= 0,
+	.report_length= 8,
+	.report_desc_length= 144,
+	/* Length without the mouse: */
+	/* .report_desc_length= 84, */
+	.report_desc= {
+		MOUSE,
+		0x05, 0x0D,         /*  Usage Page (Digitizer),             */
+		0x09, 0x04,         /*  Usage (Touchscreen),                */
+		0xA1, 0x01,         /*  Collection (Application),           */
+		0x85, REPORT_ID_MULTITOUCH, /* Report ID (4),               */
+		0x09, 0x22,         /*      Usage (Finger),                 */
+		0xA1, 0x00,         /*      Collection (Physical),          */
+		0x09, 0x42,         /*          Usage (Tip Switch),         */
+		0x15, 0x00,         /*          Logical Minimum (0),        */
+		0x25, 0x01,         /*          Logical Maximum (1),        */
+		0x75, 0x01,         /*          Report Size (1),            */
+		0x95, 0x01,         /*          Report Count (1),           */
+		0x81, 0x02,         /*          Input (Variable),           */
+		0x09, 0x32,         /*          Usage (In Range),           */
+		0x81, 0x02,         /*          Input (Variable),           */
+		0x09, 0x37,         /*          Usage (Data Valid),         */
+		0x81, 0x02,         /*          Input (Variable),           */
+		0x25, 0x1F,         /*          Logical Maximum (31),       */
+		0x75, 0x05,         /*          Report Size (5),            */
+		0x09, 0x51,         /*          Usage (51h),                */
+		0x81, 0x02,         /*          Input (Variable),           */
+		0x05, 0x01,         /*          Usage Page (Desktop),       */
+		0x55, 0x0E,         /*          Unit Exponent (14),         */
+		0x65, 0x11,         /*          Unit (Centimeter),          */
+		0x35, 0x00,         /*          Physical Minimum (0),       */
+		0x75, 0x10,         /*          Report Size (16),           */
+		0x46, 0x56, 0x0A,   /*          Physical Maximum (2646),    */
+		0x26, 0xFF, 0x0F,   /*          Logical Maximum (4095),     */
+		0x09, 0x30,         /*          Usage (X),                  */
+		0x81, 0x02,         /*          Input (Variable),           */
+		0x46, 0xB2, 0x05,   /*          Physical Maximum (1458),    */
+		0x26, 0xFF, 0x0F,   /*          Logical Maximum (4095),     */
+		0x09, 0x31,         /*          Usage (Y),                  */
+		0x81, 0x02,         /*          Input (Variable),           */
+		0x05, 0x0D,         /*          Usage Page (Digitizer),     */
+		0x75, 0x08,         /*          Report Size (8),            */
+		0x85, REPORT_ID_MT_MAX_COUNT, /* Report ID (10),            */
+		0x09, 0x55,         /*          Usage (55h),                */
+		0x25, 0x10,         /*          Logical Maximum (16),       */
+		0xB1, 0x02,         /*          Feature (Variable),         */
+		0xC0,               /*      End Collection,                 */
+		0xC0                /*  End Collection                      */
+	}
 };
 
 static int create_new_hidg(void);
@@ -346,50 +353,42 @@ static ssize_t hidg_new(struct device *dev,
 			struct device_attribute *attr,
 			char *buf)
 {
-  int res;
+	create_new_hidg();
 
-  res = create_new_hidg();
-  sprintf(buf, "%d\n", res);
-
-  if (res >= 100)
-    return 4;
-  if (res >= 10)
-    return 3;
-  else
-    return 2;
+	return 0;
 }
 
 static DEVICE_ATTR(new_superhid, S_IRUGO, hidg_new, NULL);
 
 static int create_new_hidg(void)
 {
-  static int id = 0;
-  struct platform_device *dev;
-  int ret;
-  struct hidg_device_node *entry;  
+	static int id = 0;
+	struct platform_device *dev;
+	int ret;
+	struct hidg_device_node *entry;
 
-  dev = platform_device_alloc("hidg", id);
-  dev->dev.platform_data = &my_hid_data;
+	dev = platform_device_alloc("hidg", id);
+	dev->dev.platform_data = &my_hid_data;
 
-  ret = platform_device_add(dev);
+	ret = platform_device_add(dev);
 
-  if (ret)
-    {
-      printk("SuperHID Gadget registration failed\n");
-      return -1;
-    }
+	if (ret)
+	{
+		printk("SuperHID Gadget registration failed\n");
+		return -1;
+	}
 
-  /* ISUCK: Creating the sysfs node if this is the first hidg */
-  if (id == 0)
-    ret = device_create_file(&dev->dev, &dev_attr_new_superhid);
+	/* ISUCK: Creating the sysfs node if this is the first hidg */
+	if (id == 0)
+	  ret = device_create_file(&dev->dev, &dev_attr_new_superhid);
 
-  entry = kzalloc(sizeof(struct hidg_device_node), GFP_KERNEL);
-  if (!entry)
-    return -ENOMEM;
-  entry->dev = dev;
-  list_add_tail(&entry->node, &hidg_devices);
+	entry = kzalloc(sizeof(struct hidg_device_node), GFP_KERNEL);
+	if (!entry)
+	  return -ENOMEM;
+	entry->dev = dev;
+	list_add_tail(&entry->node, &hidg_devices);
 
-  return id++;
+	return id++;
 }
 
 static int __init hidg_init(void)
@@ -397,7 +396,7 @@ static int __init hidg_init(void)
 	int status;
 
 	status = platform_driver_probe(&hidg_plat_driver,
-				hidg_plat_driver_probe);
+				       hidg_plat_driver_probe);
 	if (status < 0)
 		return status;
 

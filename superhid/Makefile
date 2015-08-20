@@ -1,4 +1,4 @@
-obj-m += composite.o usbstring.o config.o epautoconf.o superhid.o 
+obj-m += superhid.o
 KVERSION := $(shell uname -r)
 
 all:
