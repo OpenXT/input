@@ -395,6 +395,10 @@ static int __init hidg_init(void)
 {
 	int status;
 
+	status = create_new_hidg();
+	if ( status < 0)
+		return status;
+
 	status = platform_driver_probe(&hidg_plat_driver,
 				       hidg_plat_driver_probe);
 	if (status < 0)

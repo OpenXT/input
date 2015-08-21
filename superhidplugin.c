@@ -114,57 +114,57 @@ static uint16_t swap_bytes(uint16_t n)
 
 /* This function simulates a touchscreen from a mouse. */
 /* Useful to debug the driver without a tablet handy! */
-/* static void process_relative_event(uint16_t itype, uint16_t icode, uint32_t ivalue, */
-/* 				   char left, char middle, char right) */
-/* { */
-/*   struct superhid_report report; */
-/*   static uint16_t x = LOW_X; */
-/*   static uint16_t y = LOW_Y; */
+static void process_relative_event(uint16_t itype, uint16_t icode, uint32_t ivalue,
+				   char left, char middle, char right)
+{
+  struct superhid_report report;
+  static uint16_t x = LOW_X;
+  static uint16_t y = LOW_Y;
 
-/*   if (itype != EV_REL && itype != EV_KEY) */
-/*     return; */
+  if (itype != EV_REL && itype != EV_KEY)
+    return;
 
-/*   if (itype == EV_REL && icode == ABS_X && x + ivalue > LOW_X && x + ivalue < HIGH_X) */
-/*     x += ivalue; */
+  if (itype == EV_REL && icode == ABS_X && x + ivalue > LOW_X && x + ivalue < HIGH_X)
+    x += ivalue;
 
-/*   if (itype == EV_REL && icode == ABS_Y && y + ivalue > LOW_Y && y + ivalue < HIGH_Y) */
-/*     y += ivalue;   */
+  if (itype == EV_REL && icode == ABS_Y && y + ivalue > LOW_Y && y + ivalue < HIGH_Y)
+    y += ivalue;
 
-/*   report.report_id = REPORT_ID_MULTITOUCH; */
-/*   report.misc = 0; */
-/*   report.misc |= FINGER_1; */
-/*   if (left) */
-/*   report.misc |= TIP_SWITCH; */
-/*   report.misc |= IN_RANGE; */
-/*   report.misc |= DATA_VALID; */
-/*   /\* report.x = swap_bytes(x); *\/ */
-/*   /\* report.y = swap_bytes(y); *\/ */
-/*   report.x = x; */
-/*   report.y = y; */
+  report.report_id = REPORT_ID_MULTITOUCH;
+  report.misc = 0;
+  report.misc |= FINGER_1;
+  if (left)
+  report.misc |= TIP_SWITCH;
+  report.misc |= IN_RANGE;
+  report.misc |= DATA_VALID;
+  /* report.x = swap_bytes(x); */
+  /* report.y = swap_bytes(y); */
+  report.x = x;
+  report.y = y;
 
-/*   write(write_fd, &report, 6); */
+  write(hid_fd, &report, 6);
 
-/*   if (middle) */
-/*     { */
-/*       report.misc |= TIP_SWITCH; */
-/*       report.misc &= 0xF7; */
-/*       report.misc |= FINGER_2; */
-/*       report.x = report.x + 50; */
-/*       write(write_fd, &report, 6); */
-/*     } */
+  if (middle)
+    {
+      report.misc |= TIP_SWITCH;
+      report.misc &= 0xF7;
+      report.misc |= FINGER_2;
+      report.x = report.x + 50;
+      write(hid_fd, &report, 6);
+    }
 
-/*   if (right) */
-/*     { */
-/*       report.misc |= TIP_SWITCH; */
-/*       report.misc &= 0xE7; */
-/*       report.misc |= FINGER_3; */
-/*       if (middle) */
-/* 	report.x = report.x + 50; */
-/*       else */
-/* 	report.x = report.x + 100; */
-/*       write(write_fd, &report, 6); */
-/*     } */
-/* } */
+  if (right)
+    {
+      report.misc |= TIP_SWITCH;
+      report.misc &= 0xE7;
+      report.misc |= FINGER_3;
+      if (middle)
+	report.x = report.x + 50;
+      else
+	report.x = report.x + 100;
+      write(hid_fd, &report, 6);
+    }
+}
 
 static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ivalue)
 {
@@ -252,21 +252,22 @@ static void process_event (struct event_record *r, struct buffer_t *b)
   uint16_t icode;
   uint32_t ivalue;
   static int dev_set;
-  /* static char left = 0; */
-  /* static char middle = 0; */
-  /* static char right = 0; */
+  static char left = 0;
+  static char middle = 0;
+  static char right = 0;
 
   itype = r->itype;
   icode = r->icode;
   ivalue = r->ivalue;
-  /* Uncomment that and process_relative_event to emulate a touchscreen from a mouse */
-  /* if (itype == EV_KEY && icode == BTN_LEFT) */
-  /*   left = !!ivalue; */
-  /* if (itype == EV_KEY && icode == BTN_MIDDLE) */
-  /*   middle = !!ivalue; */
-  /* if (itype == EV_KEY && icode == BTN_RIGHT) */
-  /*   right = !!ivalue; */
 
+  if (itype == EV_KEY && icode == BTN_LEFT)
+    left = !!ivalue;
+  if (itype == EV_KEY && icode == BTN_MIDDLE)
+    middle = !!ivalue;
+  if (itype == EV_KEY && icode == BTN_RIGHT)
+    right = !!ivalue;
+
+  /* Uncomment the following line to emulate a touchscreen from a mouse */
   /* process_relative_event(itype, icode, ivalue, left, middle, right); */
 
   if (itype == EV_DEV && icode == DEV_SET)
