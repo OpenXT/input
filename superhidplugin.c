@@ -70,28 +70,28 @@
 
 struct event_record
 {
-    uint32_t magic;
-    uint16_t itype;
-    uint16_t icode;
-    uint32_t ivalue;
+  uint32_t magic;
+  uint16_t itype;
+  uint16_t icode;
+  uint32_t ivalue;
 } __attribute__ ((__packed__));
 
 struct buffer_t
 {
-    char buffer[buffersize];
-    unsigned int bytes_remaining;
-    int position;
-    int s;
-    int copy;
-    int block;
+  char buffer[buffersize];
+  unsigned int bytes_remaining;
+  int position;
+  int s;
+  int copy;
+  int block;
 } buffers;
 
 struct superhid_report
 {
-    uint8_t report_id;
-    uint8_t misc;
-    uint16_t x;
-    uint16_t y;
+  uint8_t report_id;
+  uint8_t misc;
+  uint16_t x;
+  uint16_t y;
 } __attribute__ ((__packed__));
 
 int hid_fd;
@@ -99,7 +99,7 @@ struct event recv_event;
 
 static void stop ()
 {
-    event_del (&recv_event);
+  event_del (&recv_event);
 }
 
 /* Some OSes swap the x,y coordinates for some reason... */
@@ -114,27 +114,35 @@ static uint16_t swap_bytes(uint16_t n)
 
 /* This function simulates a touchscreen from a mouse. */
 /* Useful to debug the driver without a tablet handy! */
-static void process_relative_event(uint16_t itype, uint16_t icode, uint32_t ivalue,
-				   char left, char middle, char right)
+static int process_relative_event(uint16_t itype, uint16_t icode, uint32_t ivalue,
+                                  char left, char middle, char right)
 {
   struct superhid_report report;
   static uint16_t x = LOW_X;
   static uint16_t y = LOW_Y;
 
-  if (itype != EV_REL && itype != EV_KEY)
-    return;
+  /* Don't process if this is not a mouse/trackpad move/clic */
+  if (itype != EV_REL && itype != EV_ABS &&
+      !(itype == EV_KEY && (icode == BTN_LEFT || icode == BTN_RIGHT || icode == BTN_MIDDLE)))
+    return 0;
 
-  if (itype == EV_REL && icode == ABS_X && x + ivalue > LOW_X && x + ivalue < HIGH_X)
+  if (itype == EV_REL && icode == REL_X && x + ivalue > LOW_X && x + ivalue < HIGH_X)
     x += ivalue;
 
-  if (itype == EV_REL && icode == ABS_Y && y + ivalue > LOW_Y && y + ivalue < HIGH_Y)
+  if (itype == EV_REL && icode == REL_Y && y + ivalue > LOW_Y && y + ivalue < HIGH_Y)
     y += ivalue;
+
+  if (itype == EV_ABS && icode == ABS_X && ivalue / 10 > LOW_X && ivalue / 10 < HIGH_X)
+    x = ivalue / 10;
+
+  if (itype == EV_ABS && icode == ABS_Y && ivalue / 10 > LOW_Y && ivalue / 10 < HIGH_Y)
+    y = ivalue / 10;
 
   report.report_id = REPORT_ID_MULTITOUCH;
   report.misc = 0;
   report.misc |= FINGER_1;
   if (left)
-  report.misc |= TIP_SWITCH;
+    report.misc |= TIP_SWITCH;
   report.misc |= IN_RANGE;
   report.misc |= DATA_VALID;
   /* report.x = swap_bytes(x); */
@@ -145,25 +153,27 @@ static void process_relative_event(uint16_t itype, uint16_t icode, uint32_t ival
   write(hid_fd, &report, 6);
 
   if (middle)
-    {
-      report.misc |= TIP_SWITCH;
-      report.misc &= 0xF7;
-      report.misc |= FINGER_2;
-      report.x = report.x + 50;
-      write(hid_fd, &report, 6);
-    }
+  {
+    report.misc |= TIP_SWITCH;
+    report.misc &= 0xF7;
+    report.misc |= FINGER_2;
+    report.x = report.x + 50;
+    write(hid_fd, &report, 6);
+  }
 
   if (right)
-    {
-      report.misc |= TIP_SWITCH;
-      report.misc &= 0xE7;
-      report.misc |= FINGER_3;
-      if (middle)
-	report.x = report.x + 50;
-      else
-	report.x = report.x + 100;
-      write(hid_fd, &report, 6);
-    }
+  {
+    report.misc |= TIP_SWITCH;
+    report.misc &= 0xE7;
+    report.misc |= FINGER_3;
+    if (middle)
+      report.x = report.x + 50;
+    else
+      report.x = report.x + 100;
+    write(hid_fd, &report, 6);
+  }
+
+  return 1;
 }
 
 static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ivalue)
@@ -175,73 +185,73 @@ static void process_absolute_event(uint16_t itype, uint16_t icode, uint32_t ival
 
   /* Initialize the report array */
   if (report[finger].report_id == 0)
+  {
+    for (i = 0; i < MAX_FINGERS; ++i)
     {
-      for (i = 0; i < MAX_FINGERS; ++i)
-	{
-	  report[i].report_id = REPORT_ID_MULTITOUCH;
-	  report[i].misc = 0;
-	  /* TODO: use that flag(s) properly :) */
-	  report[i].misc |= IN_RANGE;
-	  report[i].misc |= DATA_VALID;
-	  /* Setting the finger ID */
-	  report[i].misc |= (i << 3) & 0xF8;
-	  /* Finger touching by default? */
-	  /* report[i].misc |= TIP_SWITCH; */
-	}
+      report[i].report_id = REPORT_ID_MULTITOUCH;
+      report[i].misc = 0;
+      /* TODO: use that flag(s) properly :) */
+      report[i].misc |= IN_RANGE;
+      report[i].misc |= DATA_VALID;
+      /* Setting the finger ID */
+      report[i].misc |= (i << 3) & 0xF8;
+      /* Finger touching by default? */
+      /* report[i].misc |= TIP_SWITCH; */
     }
+  }
 
   switch (itype)
+  {
+  case EV_ABS:
+    switch (icode)
     {
-    case EV_ABS:
-      switch (icode)
-	{
-	/* case ABS_X: */
-	case ABS_MT_POSITION_X:
-	  report[finger].x = ivalue >> 3;
-	  break;
-	/* case ABS_Y: */
-	case ABS_MT_POSITION_Y:
-	  report[finger].y = ivalue >> 3;
-	  break;
-	case ABS_MT_SLOT:
-	  /* We force a SYN_REPORT on ABS_MT_SLOT, because the device is serial. */
-	  /* However, we don't want to send twice the same event for nothing... */
-	  if (!just_syned)
-	    write(hid_fd, &(report[finger]), 6);
-	  finger = ivalue;
-	  break;
-	case ABS_MT_TRACKING_ID:
-	  if (ivalue == 0xFFFFFFFF)
-	    report[finger].misc &= ~TIP_SWITCH;
-	  else
-	    report[finger].misc |= TIP_SWITCH;
-	default:
-	  break;
-	}
+      /* case ABS_X: */
+    case ABS_MT_POSITION_X:
+      report[finger].x = ivalue >> 3;
       break;
-    case EV_KEY:
-      switch (icode)
-	{
-	default:
-	  break;
-	}
+      /* case ABS_Y: */
+    case ABS_MT_POSITION_Y:
+      report[finger].y = ivalue >> 3;
       break;
-    case EV_SYN:
-      switch (icode)
-	{
-	case SYN_REPORT:
-	  write(hid_fd, &(report[finger]), 6);
-	  just_syned = 1;
-	  /* re-init */
-	  /* Nothing to do? */
-	  return;
-	  break;
-	default:
-	  break;
-	}
+    case ABS_MT_SLOT:
+      /* We force a SYN_REPORT on ABS_MT_SLOT, because the device is serial. */
+      /* However, we don't want to send twice the same event for nothing... */
+      if (!just_syned)
+        write(hid_fd, &(report[finger]), 6);
+      finger = ivalue;
+      break;
+    case ABS_MT_TRACKING_ID:
+      if (ivalue == 0xFFFFFFFF)
+        report[finger].misc &= ~TIP_SWITCH;
+      else
+        report[finger].misc |= TIP_SWITCH;
     default:
       break;
     }
+    break;
+  case EV_KEY:
+    switch (icode)
+    {
+    default:
+      break;
+    }
+    break;
+  case EV_SYN:
+    switch (icode)
+    {
+    case SYN_REPORT:
+      write(hid_fd, &(report[finger]), 6);
+      just_syned = 1;
+      /* re-init */
+      /* Nothing to do? */
+      return;
+      break;
+    default:
+      break;
+    }
+  default:
+    break;
+  }
 
   just_syned = 0;
 }
@@ -255,6 +265,7 @@ static void process_event (struct event_record *r, struct buffer_t *b)
   static char left = 0;
   static char middle = 0;
   static char right = 0;
+  int relatived = 0;
 
   itype = r->itype;
   icode = r->icode;
@@ -268,146 +279,160 @@ static void process_event (struct event_record *r, struct buffer_t *b)
     right = !!ivalue;
 
   /* Uncomment the following line to emulate a touchscreen from a mouse */
-  /* process_relative_event(itype, icode, ivalue, left, middle, right); */
+  /* relatived = process_relative_event(itype, icode, ivalue, left, middle, right); */
+
+  if (relatived)
+    return;
 
   if (itype == EV_DEV && icode == DEV_SET)
-    {
-      dev_set = ivalue;
-      printf("DEV_SET %d\n", dev_set);
-    }
+  {
+    dev_set = ivalue;
+    printf("DEV_SET %d\n", dev_set);
+  }
 
-  if (dev_set != 6)
+  if (dev_set != 6) {
+    /* process_relative_event() didn't do anything, and this is not a
+     * touchscreen event (device 6).
+     * At this point we'd want to just send that event to the guest
+     * unmodified. Unfortunately, event sending seems to be broken... */
+#if 0
+    if (itype == EV_KEY) {
+      r->magic = MAGIC;
+      send(b->s, r, sizeof(struct event_record), 0);
+    }
+#endif
     return;
+  }
 
   process_absolute_event(itype, icode, ivalue);
 }
 
 struct event_record *findnext (struct buffer_t *b)
 {
-    struct event_record *r = NULL;
-    int start = b->position;
+  struct event_record *r = NULL;
+  int start = b->position;
 
-    /* Skip junk */
-    while (b->bytes_remaining >= EVENT_SIZE &&
-	   (r = (struct event_record *) &b->buffer[b->position]) && r->magic != MAGIC)
-    {
-      printf("SKIPPED!\n");
-	b->bytes_remaining--;
-	b->position++;
-    }
+  /* Skip junk */
+  while (b->bytes_remaining >= EVENT_SIZE &&
+         (r = (struct event_record *) &b->buffer[b->position]) && r->magic != MAGIC)
+  {
+    printf("SKIPPED!\n");
+    b->bytes_remaining--;
+    b->position++;
+  }
 
-    if (start != b->position)
-	printf ("Warning: Encountered %d bytes of junk.\n", b->position - start);
+  if (start != b->position)
+    printf ("Warning: Encountered %d bytes of junk.\n", b->position - start);
 
-    if (b->bytes_remaining >= EVENT_SIZE)
-    {
-	b->bytes_remaining -= EVENT_SIZE;
-	b->position += EVENT_SIZE;
-	return r;
-    }
-    else
-	return NULL;
+  if (b->bytes_remaining >= EVENT_SIZE)
+  {
+    b->bytes_remaining -= EVENT_SIZE;
+    b->position += EVENT_SIZE;
+    return r;
+  }
+  else
+    return NULL;
 }
 
 static void recv_callback (int fd, short event, void *opaque)
 {
-    int n;
-    struct buffer_t *buf = &buffers;
-    char *b = buf->buffer;
+  int n;
+  struct buffer_t *buf = &buffers;
+  char *b = buf->buffer;
 
-    memmove (b, &b[buf->position], buf->bytes_remaining);
-    buf->position = 0;
-    size_t nbytes = 0;
-    n = recv (fd, &b[buf->bytes_remaining], buffersize - buf->bytes_remaining, 0);
+  memmove (b, &b[buf->position], buf->bytes_remaining);
+  buf->position = 0;
+  size_t nbytes = 0;
+  n = recv (fd, &b[buf->bytes_remaining], buffersize - buf->bytes_remaining, 0);
 
-    if (n > 0)
-    {
-	struct event_record *r = NULL;
-	buf->bytes_remaining += n;
+  if (n > 0)
+  {
+    struct event_record *r = NULL;
+    buf->bytes_remaining += n;
 
-	while ((r = findnext (buf)) != NULL)
-	  process_event (r, buf);
-    }
-    else if (n)
-	printf ("Error %d\n", n);
-    else
-      stop();
+    while ((r = findnext (buf)) != NULL)
+      process_event (r, buf);
+  }
+  else if (n)
+    printf ("Error %d\n", n);
+  else
+    stop();
 }
 
 /* This function tells input_server to send us the events for the domain */
 void suck (int s, int d)
 {
-    struct event_record e;
+  struct event_record e;
 
-    e.magic = MAGIC;
-    e.itype = 7;
-    e.icode = 0x2;
-    e.ivalue = d;
+  e.magic = MAGIC;
+  e.itype = 7;
+  e.icode = 0x2;
+  e.ivalue = d;
 
-    if (send (s, &e, sizeof (struct event_record), 0) == -1)
-    {
-	perror ("send");
-	exit (1);
-    }
+  if (send (s, &e, sizeof (struct event_record), 0) == -1)
+  {
+    perror ("send");
+    exit (1);
+  }
 }
 
 int main (int argc, char** argv)
 {
-    int s, t, len;
-    struct sockaddr_un remote;
-    char str[100];
-    pthread_t output_thread_var;
+  int s, t, len;
+  struct sockaddr_un remote;
+  char str[100];
+  pthread_t output_thread_var;
 
-    if (argc != 2)
-      {
-	printf("Usage: superhidplugin <domid>\n");
-	exit(1);
-      }
+  if (argc != 2)
+  {
+    printf("Usage: superhidplugin <domid>\n");
+    exit(1);
+  }
 
-    /* Trying to connect to input_server to get events */
-    if ((s = socket (AF_UNIX, SOCK_STREAM, 0)) == -1)
-    {
-	perror ("socket");
-	exit (1);
-    }
+  /* Trying to connect to input_server to get events */
+  if ((s = socket (AF_UNIX, SOCK_STREAM, 0)) == -1)
+  {
+    perror ("socket");
+    exit (1);
+  }
 
-    printf ("Trying to connect...\n");
+  printf ("Trying to connect...\n");
 
-    remote.sun_family = AF_UNIX;
-    strcpy (remote.sun_path, SOCK_PATH);
-    len = strlen (remote.sun_path) + sizeof (remote.sun_family);
-    if (connect (s, (struct sockaddr *) &remote, len) == -1)
-    {
-	perror ("connect");
-	exit (1);
-    }
+  remote.sun_family = AF_UNIX;
+  strcpy (remote.sun_path, SOCK_PATH);
+  len = strlen (remote.sun_path) + sizeof (remote.sun_family);
+  if (connect (s, (struct sockaddr *) &remote, len) == -1)
+  {
+    perror ("connect");
+    exit (1);
+  }
 
-    printf ("Connected.\n");
+  printf ("Connected.\n");
 
-    buffers.bytes_remaining = 0;
-    buffers.position = 0;
-    buffers.copy = 0;
-    buffers.block = 0;
-    buffers.s = s;
+  buffers.bytes_remaining = 0;
+  buffers.position = 0;
+  buffers.copy = 0;
+  buffers.block = 0;
+  buffers.s = s;
 
-    /* Now connect to the superhid device */
-    hid_fd = open("/dev/hidg0", O_RDWR, 0666);
-    if (hid_fd == -1)
-      {
-	perror("/dev/hidg0");
-	exit(1);
-      }
+  /* Now connect to the superhid device */
+  hid_fd = open("/dev/hidg0", O_RDWR, 0666);
+  if (hid_fd == -1)
+  {
+    perror("/dev/hidg0");
+    exit(1);
+  }
 
-    event_init ();
+  event_init ();
 
-    event_set (&recv_event, s, EV_READ | EV_PERSIST, recv_callback, NULL);
-    event_add (&recv_event, NULL);
+  event_set (&recv_event, s, EV_READ | EV_PERSIST, recv_callback, NULL);
+  event_add (&recv_event, NULL);
 
-    suck (s, strtol(argv[1], NULL, 0));
+  suck (s, strtol(argv[1], NULL, 0));
 
-    event_dispatch ();
+  event_dispatch ();
 
-    close (s);
+  close (s);
 
-    return 0;
+  return 0;
 }
