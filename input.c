@@ -178,7 +178,8 @@ typedef enum
 {
     nope,
     send_sync,
-    send_left
+    send_left,
+    send_left_up,
 } sim_press;
 
 typedef enum
@@ -234,6 +235,12 @@ static inputevent_action demultitouch(struct input_event *e)
             e->value = 1;
             deferpressed = send_sync;
             return (draining) ? events_queued : send_event;
+        case send_left_up:
+            e->type = EV_KEY;
+            e->code = BTN_LEFT;
+            e->value = 0;
+            deferpressed = send_sync;
+            return (draining) ? events_queued : send_event;
         default:
             return discared_event;
         }
@@ -246,7 +253,6 @@ static inputevent_action demultitouch(struct input_event *e)
         {
             e->code = SYN_REPORT;
             slot = 1;
-            return send_event;
         }
         else if (e->code == SYN_REPORT)
         {
@@ -273,24 +279,19 @@ static inputevent_action demultitouch(struct input_event *e)
         case ABS_MT_TRACKING_ID:
             if (slot == 0)
             {
-                int nowpressed = (e->value != (int32_t) 0xffffffff);
+                int nowpressed = (e->value != -1);
 
                 if (pressed != nowpressed)
                 {
                     pressed = nowpressed;
+                    had_slot0 = true;
 
-                    if (!pressed)
-                    {
-                        e->type = EV_KEY;
-                        e->code = BTN_LEFT;
-                        e->value = 0;
-                    }
-                    else
-                    {
-                        had_slot0 = true;
+                    if (pressed)
                         deferpressed = send_left;
-                        return discared_event;
-                    }
+                    else
+                        deferpressed = send_left_up;
+
+                    return discared_event;
                 }
                 break;
             }

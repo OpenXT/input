@@ -48,7 +48,7 @@ xen_event_send_key(struct xen_vkbd_backend *backend, bool down, int keycode)
     event.key.pressed = down ? 1 : 0;
     event.key.keycode = keycode;
 
-    return xen_event_write_page(backend->device, &event);
+    return xen_event_write_page(backend->abs_device, &event);
 }
 
 /* Send a relative mouse movement */
