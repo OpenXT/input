@@ -2727,7 +2727,7 @@ identifying that the wacom bamboo touchpad is a touchpad, it stops it working.  
         if (((bustype == BUS_I8042)) && (TEST_BIT(ABS_PRESSURE, abslimits)))
             return HID_TYPE_TOUCHPAD;
 
-        if ((bustype == BUS_USB) || (bustype == BUS_RS232))
+        if ((bustype == BUS_USB) || (bustype == BUS_RS232) || bustype == BUS_I2C)
         {
             if (TEST_BIT(BTN_TOOL_PEN, keybits))
             {
@@ -2781,7 +2781,7 @@ static int consider_device(int slot)
         return -1;
 
     if (id.bustype != BUS_I8042 && id.bustype != BUS_USB &&
-        id.bustype != BUS_RS232 &&
+        id.bustype != BUS_RS232 && id.bustype != BUS_I2C &&
         !(device_is_thinkpad_acpi(id.bustype, name)) &&
         !(device_is_acpi_video(id.bustype, name)) && !(device_is_lid_switch(id.bustype, name)))
         return -1;
