@@ -37,6 +37,7 @@ struct divert_info_t;
 
 struct domain
 {
+    bool                    initialised;
     dmbus_client_t          client;
     int                     domid;
     int                     slot;

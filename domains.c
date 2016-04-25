@@ -34,7 +34,7 @@ static struct domain *__domain_with(int offset, unsigned int size, const void *a
     int         i;
 
     for (i = 0; i < NDOMAIN_MAX; i++)
-        if (domains[i].client != NULL &&
+        if (domains[i].initialised &&
                 !memcmp((char*)&domains[i] + offset, arg, size))
             return &domains[i];
     return NULL;
@@ -52,7 +52,7 @@ void iterate_domains(void (*callback)(struct domain *,void*), void* opaque)
     int i;
     for (i = 0; i < NDOMAIN_MAX; i++)
     {
-        if (domains[i].client != NULL)
+        if (domains[i].initialised)
             callback(&domains[i], opaque);
     }
 }
@@ -72,7 +72,7 @@ int domains_count(void)
     int         i, n = 0;
 
     for (i = 0; i < NDOMAIN_MAX; i++)
-        if (domains[i].client != NULL)
+        if (domains[i].initialised)
             n++;
     return n;
 }
@@ -88,8 +88,9 @@ static struct domain *empty_domain()
 {
     int i;
 
-    for (i=0;i<NDOMAIN_MAX;++i)
-        if (domains[i].client==NULL) return &domains[i];
+    for (i = 0; i < NDOMAIN_MAX; ++i)
+        if (!domains[i].initialised)
+            return &domains[i];
 
     return NULL;
 }
@@ -107,10 +108,11 @@ struct domain * domain_with_slot(int slot)
 struct domain *domain_with_uuid(const char *uuid)
 {
     int i;
-    for (i=0; i<NDOMAIN_MAX; ++i) {
-        if (domains[i].client != NULL && domains[i].uuid && !strcmp(domains[i].uuid, uuid)) {
+    for (i = 0; i < NDOMAIN_MAX; ++i) {
+        if (domains[i].initialised &&
+            domains[i].uuid &&
+            !strcmp(domains[i].uuid, uuid))
             return &domains[i];
-        }
     }
     return NULL;
 }
@@ -136,7 +138,7 @@ static void reset_prev_keyb_domain(struct domain *d)
 
     for (i = 0; i < NDOMAIN_MAX; i++)
     {
-        if ((domains[i].client != NULL) && (domains[i].prev_keyb_domid == d->domid))
+        if (domains[i].initialised && (domains[i].prev_keyb_domid == d->domid))
         {
             info("reset previous keyboard domain for domain %d\n", domains[i].domid);
             domains[i].prev_keyb_domain_ptr = NULL;
@@ -380,6 +382,7 @@ void domain_gone(struct domain *d)
     free(d->uuid);
     destroy_divert_info(&d->divert_info);
     d->client = NULL;
+    d->initialised = false;
     d->slot = -1;
     d->is_pvm = 0;
     d->prev_keyb_domain_ptr = NULL;
@@ -486,7 +489,7 @@ int get_idle_time()
     /* Calculate latest_input_activity considering all domains except uivm */
     for (i = 0; i < NDOMAIN_MAX; i++)
     {
-            if ((domains[i].client != NULL) && (domains[i].domid != uivm_domid))
+            if (domains[i].initialised && (domains[i].domid != uivm_domid))
             {
                     guest_vm_count++;
                     if(domains[i].is_in_s3)
@@ -644,10 +647,14 @@ domain_read_is_pv_domain(struct domain *d)
     d->is_pv_domain = 0;
 
     ret = xc_domain_getinfo(xc_handle, d->domid, 1, &info);
-    if (ret != 1)
+    if (ret != 1) {
+        warning("xc_domain_getinfo() failed (%s).", strerror(errno));
         return;
-    if (info.domid != (uint32_t) d->domid)
+    }
+    if (info.domid != (uint32_t) d->domid) {
+        warning("xc_domain_getinfo() reports a different domid (input:%d vs getinfo:%d).", d->domid, info.domid);
         return;
+    }
 
     d->is_pv_domain = !info.hvm;
 }
@@ -1085,6 +1092,7 @@ struct domain *domain_create(dmbus_client_t client, int domid, DeviceType type)
     d->prev_keyb_domain_ptr = NULL;
     d->prev_keyb_domid = -1;
     d->client=client;
+    d->initialised = true;
     d->sstate = 5;
     d->mouse_switch.left = -1;
     d->mouse_switch.right = -1;
@@ -1095,6 +1103,118 @@ struct domain *domain_create(dmbus_client_t client, int domid, DeviceType type)
         switcher_domid(d, domid);
     else if (DEVICE_TYPE_INPUT_PVM == type)
         switcher_pvm_domid(d, domid);
+
+    return d;
+}
+
+struct domain *domain_connect_vkbd(int domid)
+{
+    struct domain *d;
+    int slot;
+    char path[128], perm[128];
+
+    info("%s()", __func__);
+    /* Domain unicity check.
+     * XXX: It should be possible to "hotplug" a VKBD to an existing domain.
+     *      This is not supported yet though, and there is limited incentive to
+     *      support it as well. */
+    if (domain_with(domid, &domid)) {
+        error("domain %d already exists.", domid);
+        return NULL;
+    }
+    d = empty_domain();
+    d->domid = domid;
+    info("%s(): dom%u at %p.", __func__, d->domid, d);
+
+    /* Check for PV only. */
+    domain_read_uuid(d);
+    domain_read_is_pv_domain(d);
+    if (!d->is_pv_domain) {
+        error("Domain %d is not PV.", d->domid);
+        return NULL;
+    }
+
+    /* Slot attribution. */
+    slot = domain_read_slot(d);
+    if (slot_occupied_by_dead_domain(slot)) {
+        warning("Slot %d is held by a dead domain, clean-up.", slot);
+        domain_gone(domain_with(slot, &slot));
+    }
+    if (domain_with(slot, &slot) || (slot < 0)) {
+        error("Domain %d requires slot %d, which is already attributed.",
+              d->domid, slot);
+        return NULL;
+    }
+    d->slot = slot;
+
+    /* Slot 0 (UIVM) special case.
+     * XXX: Stuff in here might be deprecated... */
+    if (slot == 0) {
+
+        xenstore_dom_write(d->domid, "http://1.0.0.0/auth.html", "login/url");
+        xenstore_dom_write(d->domid, "3", "login/state");
+
+        sprintf(perm, "n%d", domid);
+        sprintf(path, "/local/domain/%d/report/state", d->domid);
+        xenstore_write_int(3, path);
+        xenstore_chmod(perm, 1, path);
+
+        sprintf(path, "/local/domain/%d/report/url", d->domid);
+        xenstore_write("http://1.0.0.0/create_report.html", path);
+        xenstore_chmod (perm, 1, path);
+    }
+
+    /* Setup Xenstore node for slot switch.
+     * XXX: This is a bit weird, do we still (want to) support
+     *      domains being able to switch to another one ?
+     */
+    xenstore_dom_write(d->domid, "", "switcher/command");
+    sprintf(perm, "r%d", d->domid);
+    xenstore_dom_chmod(d->domid, perm, 1, "switcher/command");
+    if (!xenstore_dom_watch(domid, domain_command, d, "switcher/command"))
+        warning("Could not setup xenstore watch on switcher/command");
+
+    /* Initialise relative/absolute factors for the given resolution.
+     * Use a watch on node attr/desktopDimensions.
+     * XXX: Isn't that HVM/Windows only ? */
+    d->rel_x_mult = MAX_MOUSE_ABS_X / DEFAULT_RESOLUTION_X;
+    d->rel_y_mult = MAX_MOUSE_ABS_Y / DEFAULT_RESOLUTION_Y;
+    d->desktop_xres = d->desktop_yres = 0;
+    if (!xenstore_dom_watch(d->domid, domain_calculate_abs_scaling, d, "attr/desktopDimensions"))
+        warning("Could not setup xenstore watch on switcher/command");
+
+    /* Report not being a PVM.
+     * Use Xenstore node <dompath>/switcher/have_gpu. */
+    d->is_pvm = 0;
+    xenstore_dom_write_int(d->domid, 0, "switcher/have_gpu");
+
+    /* Handle PM events.
+     * Setup watch on Xenstore node <dompath>/power-state. */
+    if (!xenstore_dom_watch(d->domid, domain_power_state, d, "power-state"))
+        warning("failed to install xenstore watch! power-state");
+    domain_power_state("power-state",d);
+
+    /* Initialise the VKBD backend with libxenbackend. */
+    xen_vkbd_backend_create(d);
+
+    /* Initialise display position for mouse switching.
+     * XXX: Uses <dompath>/switcher/<slot>/{left,right} and talks with
+     *      xenvm over dbus. */
+    domain_mouse_switch_config(d);
+
+    /* Update the slots[] global with what we just configured for this domain.
+     * XXX: This is a tad convoluted. */
+    focus_update_domain(d);
+
+    d->initialised = true;
+
+    {
+        info("Listing current domains handled by input...");
+        size_t i;
+        for (i = 0; i < NDOMAIN_MAX; ++i)
+            if (domains[i].initialised)
+                info("dom%d -> slot:%d.", domains[i].domid, domains[i].slot);
+    }
 
     return d;
 }
@@ -1112,6 +1232,7 @@ void domain_init(void)
         domains[i].domid=-1;
         domains[i].slot=-1;
         domains[i].client=NULL;
+        domains[i].initialised=false;
     }
 }
 
