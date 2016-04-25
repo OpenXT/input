@@ -30,10 +30,12 @@ static const char NoSrcId[]   = "NoSrcUuid";
 static const char Busy[]      = "Busy";
 static const char BadFrame[]      = "BadFrame";
 static const char OutOfRange[]      = "OutOfRange";
+static const char FailedVkbd[] = "FailedVkbd";
 
 static const char BadUuid_txt[]   = "The UUID '%s' could not be found.";
 static const char NoMemory_divert_txt[] = "Could not create divert info.";
 static const char NoSrcId_txt[] = "The UUID of the caller could not be found.  (This method cannot be called from Dom0!)";
+static const char FailedVkbd_txt[] = "Failed to create a Vkbd input domain.";
 
 gboolean
 input_daemon_set_slot(InputDaemonObject *this, gint IN_domid, gint IN_slot, GError** err)
@@ -949,3 +951,22 @@ input_daemon_property_set_numlock_restore_on_switch(InputDaemonObject *this, gbo
     input_set_numlock_restore_on_switch(IN_value);
     return TRUE;
 }
+
+gboolean
+input_daemon_connect_vkbd(InputDaemonObject *this, gint IN_domid, GError** err)
+{
+    struct domain *d;
+
+    info("%s(): dom%u", __func__, IN_domid);
+    d = domain_connect_vkbd(IN_domid);
+    /* TODO: manage PTR_ERR(errno) to return a precise failure.*/
+    if (d == NULL) {
+        set_error(err, gI, FailedVkbd, FailedVkbd_txt);
+        return FALSE;
+    }
+    // XXX: Was always set to true by dmbus (the switcher_abs was always sent). Lets save an RPC.
+    d->abs_enabled = true;
+
+    return TRUE;
+}
+

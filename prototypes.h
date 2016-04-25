@@ -184,6 +184,7 @@ void handle_switcher_shutdown(void *priv, struct msg_switcher_shutdown *msg, siz
 void domain_wake_from_s3(struct domain *d);
 void domain_mouse_switch_config(void *opaque);
 struct domain *domain_create(dmbus_client_t client, int domid, DeviceType type);
+struct domain *domain_connect_vkbd(int domid);
 void domain_init(void);
 void domain_release(_Bool infork);
 /* switch.c */
