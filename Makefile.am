@@ -38,7 +38,7 @@ DBUS_SERVER_IDLS=input_daemon
 
 SRCS=server.c bus.c secure_scripts.c user.c secure.c input.c domains.c \
      switch.c util.c focus.c touchpad.c keymap.c usb-tablet.c rpcgen/input_daemon_server_obj.c \
-     pm.c xen_vkbd.c xen_event.c gesture.c lid.c encapsulate.c socket.c
+     pm.c xen_vkbd.c xen_event.c gesture.c lid.c encapsulate.c socket.c debug.c
 
 LIBS=-lz -lssl -levent @UDEV_LIBS@ @DBUS_LIBS@ @DBUS_GLIB_LIBS@ @LIBXCDBUS_LIBS@ @LIBXC_LIB@ @LIBXCXENSTORE_LIBS@ @LIBDMBUS_LIB@ @LIBV4V_LIB@ @LIBXENBACKEND_LIB@
 
