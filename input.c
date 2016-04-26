@@ -619,7 +619,7 @@ static void input_send(struct domain *d, int slot, struct input_event *e)
     }
 
 #ifdef debug_packets
-    debug_packet(slot, e);
+    if (e) debug_packet(slot, e);
 #endif
 
     inputevent_action ia;

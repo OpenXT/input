@@ -40,6 +40,35 @@ static struct domain *__domain_with(int offset, unsigned int size, const void *a
     return NULL;
 }
 
+void domain_print(const struct domain *d)
+{
+    if (!d->initialised)
+        info ("[not initialised]");
+    else
+        info("dom%u<->slot-%u, "
+            "%sconnected dmbus-client, "
+            "is %sPV, is %spvm, is %sin s3, "
+            "ABS %sable, "
+            "desktop:%dx%d & relative:%dx%d, %d active adapters.",
+            d->domid, d->slot,
+            d->client ? "" : "dis",
+            d->is_pv_domain ? "" : "not ",
+            d->is_pvm ? "" : "not ",
+            d->is_in_s3 ? "" : "not ",
+            d->abs_enabled ? "en" : "dis",
+            d->desktop_xres, d->desktop_yres,
+            d->rel_x_mult, d->rel_y_mult,
+            d->num_active_adapters);
+}
+
+void domains_print(void)
+{
+    int i;
+
+    for (i = 0; i < NDOMAIN_MAX; ++i)
+        domain_print(&domains[i]);
+}
+
 #define domain_with(_field_, _arg_)                                     \
     __domain_with( 							\
             offsetof(struct domain, _field_), 			\
@@ -1107,119 +1136,215 @@ struct domain *domain_create(dmbus_client_t client, int domid, DeviceType type)
     return d;
 }
 
-struct domain *domain_connect_vkbd(int domid)
+void domain_init(struct domain *d, int domid)
+{
+    memset(d, 0, sizeof (*d));
+
+    d->initialised = false;
+    d->domid = domid;
+    d->slot = -1;
+
+    d->mouse_switch.left = -1;
+    d->mouse_switch.right = -1;
+
+    d->last_devslot = INPUTSLOT_INVALID;
+
+    d->rel_x_mult = MAX_MOUSE_ABS_X / DEFAULT_RESOLUTION_X;
+    d->rel_y_mult = MAX_MOUSE_ABS_Y / DEFAULT_RESOLUTION_Y;
+
+    /* Unknown... */
+    d->sstate = 5;
+    d->prev_keyb_domid = -1;
+}
+
+struct domain *domain_new(int domid)
 {
     struct domain *d;
-    int slot;
-    char path[128], perm[128];
 
-    info("%s()", __func__);
-    /* Domain unicity check.
-     * XXX: It should be possible to "hotplug" a VKBD to an existing domain.
-     *      This is not supported yet though, and there is limited incentive to
-     *      support it as well. */
-    if (domain_with(domid, &domid)) {
-        error("domain %d already exists.", domid);
+    /* Enforce domain unicity. */
+    if (domain_with_domid(domid)) {
+        error("%s: Could not create new dom%d already exists.", __func__, domid);
         return NULL;
     }
     d = empty_domain();
-    d->domid = domid;
-    info("%s(): dom%u at %p.", __func__, d->domid, d);
-
-    /* Check for PV only. */
-    domain_read_uuid(d);
-    domain_read_is_pv_domain(d);
-    if (!d->is_pv_domain) {
-        error("Domain %d is not PV.", d->domid);
+    if (d == NULL) {
+        error("%s: Could not create new dom%d, maximum capacity reached.", __func__, domid);
         return NULL;
     }
+    domain_init(d, domid);
+    return d;
+}
 
-    /* Slot attribution. */
+void domain_release(struct domain *d)
+{
+    domain_detach_vkbd(d);
+    release_xs_watches(d);
+
+    /* TODO: These have deep entanglement with the behaviour of input. */
+    reset_prev_keyb_domain(d);
+    free(d->uuid);
+    destroy_divert_info(&d->divert_info);
+
+    /* TODO: These have deep entanglement with the behaviour of input. */
+    d->client = NULL;
+    d->initialised = false;
+    d->slot = -1; /* XXX: Waaaat?! */
+    d->is_pvm = 0;
+    d->prev_keyb_domain_ptr = NULL;
+    d->prev_keyb_domid = -1;
+
+    input_domain_gone(d);
+    switcher_domain_gone(d);
+    check_diverts_for_the_dead(d);
+
+    d->initialised = false;
+}
+
+int domain_assign_slot(struct domain *d)
+{
+    int slot;
+    char perm[128];
+
+    /* Slot is set by the toolstack in Xenstore. */
     slot = domain_read_slot(d);
-    if (slot_occupied_by_dead_domain(slot)) {
-        warning("Slot %d is held by a dead domain, clean-up.", slot);
-        domain_gone(domain_with(slot, &slot));
+    if (slot < 0 || slot >= NDOMAIN_MAX) {
+        error("%s: Slot %d is invalid.", __func__, slot);
+        return -EINVAL;
     }
-    if (domain_with(slot, &slot) || (slot < 0)) {
-        error("Domain %d requires slot %d, which is already attributed.",
-              d->domid, slot);
-        return NULL;
+    /* Salvage forgotten slots from dead-domains. */
+    if (slot_occupied_by_dead_domain(slot)) {
+        warning("%s: Slot %d is held by a dead domain, clean-up.",
+                __func__, slot);
+        domain_gone(domain_with_slot(slot));
+    }
+    /* Domain<->Slot has to be unique. */
+    if (domain_with_slot(slot) || (slot < 0)) {
+        error("%s: Slot %d is already attributed to dom%u.",
+              __func__, d->domid, slot);
+        return -EEXIST;
     }
     d->slot = slot;
 
+    /* Setup Xenstore node for slot switch.
+     * XXX: This is a bit weird, is there still (incentive to) support domains
+     *      being able to switch to another slot?
+     */
+    xenstore_dom_write(d->domid, "", "switcher/command");
+    sprintf(perm, "r%d", d->domid);
+    xenstore_dom_chmod(d->domid, perm, 1, "switcher/command");
+    if (!xenstore_dom_watch(d->domid, domain_command, d, "switcher/command"))
+        warning("%s: Could not setup xenstore watch on switcher/command", __func__);
+
+    return 0;
+}
+
+int domain_setup(struct domain *d)
+{
+    int rc;
+
+    /* Allocate/Store the domain UUID in /struct domain/. */
+    domain_read_uuid(d);
+    /* xc_getphysinfo to check if this domain is PV or HVM. */
+    domain_read_is_pv_domain(d);
+    /* Assign the slot passed by the toostack through Xenstore to this domain.
+     *  - Slot read from /vm/<uuid>/slot (uuid needs to be known beforehand)
+     *  - Also setup relevant nodes in XenStore to manage that slot.
+     */
+    rc = domain_assign_slot(d);
+    if (rc)
+        return rc;
+
     /* Slot 0 (UIVM) special case.
      * XXX: Stuff in here might be deprecated... */
-    if (slot == 0) {
+    if (d->slot == 0) {
+        char path[128], perm[128];
 
         xenstore_dom_write(d->domid, "http://1.0.0.0/auth.html", "login/url");
         xenstore_dom_write(d->domid, "3", "login/state");
 
-        sprintf(perm, "n%d", domid);
+        sprintf(perm, "n%d", d->domid);
         sprintf(path, "/local/domain/%d/report/state", d->domid);
         xenstore_write_int(3, path);
         xenstore_chmod(perm, 1, path);
 
         sprintf(path, "/local/domain/%d/report/url", d->domid);
         xenstore_write("http://1.0.0.0/create_report.html", path);
-        xenstore_chmod (perm, 1, path);
+        xenstore_chmod(perm, 1, path);
     }
 
-    /* Setup Xenstore node for slot switch.
-     * XXX: This is a bit weird, do we still (want to) support
-     *      domains being able to switch to another one ?
-     */
-    xenstore_dom_write(d->domid, "", "switcher/command");
-    sprintf(perm, "r%d", d->domid);
-    xenstore_dom_chmod(d->domid, perm, 1, "switcher/command");
-    if (!xenstore_dom_watch(domid, domain_command, d, "switcher/command"))
-        warning("Could not setup xenstore watch on switcher/command");
-
-    /* Initialise relative/absolute factors for the given resolution.
-     * Use a watch on node attr/desktopDimensions.
+    /* Watch on node attr/desktopDimensions for resize events?
      * XXX: Isn't that HVM/Windows only ? */
-    d->rel_x_mult = MAX_MOUSE_ABS_X / DEFAULT_RESOLUTION_X;
-    d->rel_y_mult = MAX_MOUSE_ABS_Y / DEFAULT_RESOLUTION_Y;
-    d->desktop_xres = d->desktop_yres = 0;
-    if (!xenstore_dom_watch(d->domid, domain_calculate_abs_scaling, d, "attr/desktopDimensions"))
-        warning("Could not setup xenstore watch on switcher/command");
-
-    /* Report not being a PVM.
-     * Use Xenstore node <dompath>/switcher/have_gpu. */
-    d->is_pvm = 0;
-    xenstore_dom_write_int(d->domid, 0, "switcher/have_gpu");
+    if (!xenstore_dom_watch(d->domid, domain_calculate_abs_scaling, d,
+                            "attr/desktopDimensions"))
+        warning("%s: Could not setup xenstore watch on switcher/command."
+                " Slot will be static.", __func__);
 
     /* Handle PM events.
      * Setup watch on Xenstore node <dompath>/power-state. */
     if (!xenstore_dom_watch(d->domid, domain_power_state, d, "power-state"))
-        warning("failed to install xenstore watch! power-state");
-    domain_power_state("power-state",d);
-
-    /* Initialise the VKBD backend with libxenbackend. */
-    xen_vkbd_backend_create(d);
+        warning("%s: Could not setup xenstore watch on power-state."
+                " Power-management event will not be handled properly.",
+                __func__);
+    domain_power_state("power-state", d);
 
     /* Initialise display position for mouse switching.
      * XXX: Uses <dompath>/switcher/<slot>/{left,right} and talks with
      *      xenvm over dbus. */
     domain_mouse_switch_config(d);
 
-    /* Update the slots[] global with what we just configured for this domain.
-     * XXX: This is a tad convoluted. */
-    focus_update_domain(d);
-
     d->initialised = true;
-
-    {
-        info("Listing current domains handled by input...");
-        size_t i;
-        for (i = 0; i < NDOMAIN_MAX; ++i)
-            if (domains[i].initialised)
-                info("dom%d -> slot:%d.", domains[i].domid, domains[i].slot);
-    }
-
-    return d;
+    return 0;
 }
 
-void domain_init(void)
+int domain_set_pvm(struct domain *d, bool is_pvm)
+{
+    assert(d != NULL);
+    d->is_pvm = is_pvm;
+    xenstore_dom_write_int(d->domid, d->is_pvm, "switcher/have_gpu");
+    return 0;
+}
+
+int domain_attach_vkbd(struct domain *d)
+{
+    assert(d != NULL);
+
+    if (!d->is_pv_domain) {
+        error("%s: Could not attach VKBD to dom%u. Domain must be PV.",
+                __func__, d->domid);
+        return -EINVAL;
+    }
+    if (d->vkbd_backend != NULL) {
+        error("%s: Could not attach VKBD to dom%u."
+              " Domain already has a VKBD device, input-server can only \
+              manage one per domain.");
+        return -EEXIST;
+    }
+    /* Initialise the VKBD backend with libxenbackend. */
+    xen_vkbd_backend_create(d);
+
+    /* XXX: VKBD wants absolute coordinates? This used to be passed as DMBUS
+     *      RPC, but was always /true/. */
+    d->abs_enabled = true;
+
+    return 0;
+}
+
+void domain_detach_vkbd(struct domain *d)
+{
+    assert(d != NULL);
+    if (d->vkbd_backend == NULL)
+        return;
+
+    xen_vkbd_backend_release(d);
+
+    /* XXX: Vkbd was apparently used to add/remove the /struct domain/ from input-server management.
+     *      Since Input only handles one Vkbd (one keyboard and one mouse), detaching Vkbd means we need
+     *      to reset focus, release resources, ...
+     */
+    domain_release(d);
+}
+
+void domains_init(void)
 {
     int i;
 
@@ -1237,7 +1362,7 @@ void domain_init(void)
 }
 
 
-void domain_release(bool infork)
+void domains_release(bool infork)
 {
     unsigned int i = 0;
 
