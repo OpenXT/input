@@ -162,6 +162,8 @@ void input_release(_Bool in_fork);
 int input_init(void);
 void sock_plugin_sendconfig(struct sock_plugin* plug);
 /* domains.c */
+void domain_print(const struct domain *d);
+void domains_print(void);
 void iterate_domains(void (*callback)(struct domain *, void *), void *opaque);
 void check_diverts_for_the_dead(struct domain *d);
 int domains_count(void);
@@ -184,8 +186,18 @@ void handle_switcher_shutdown(void *priv, struct msg_switcher_shutdown *msg, siz
 void domain_wake_from_s3(struct domain *d);
 void domain_mouse_switch_config(void *opaque);
 struct domain *domain_create(dmbus_client_t client, int domid, DeviceType type);
-void domain_init(void);
-void domain_release(_Bool infork);
+struct domain *domain_connect_vkbd(int domid);
+void domains_init(void);
+void domains_release(_Bool infork);
+
+void domain_init(struct domain *d, int domid);
+struct domain *domain_new(int domid);
+void domain_release(struct domain *d);
+int domain_assign_slot(struct domain *d);
+int domain_setup(struct domain *d);
+int domain_set_pvm(struct domain *d, bool is_pvm);
+int domain_attach_vkbd(struct domain *d);
+void domain_detach_vkbd(struct domain *d);
 /* switch.c */
 int switcher_switch_graphic(struct domain *d, int force);
 void switcher_unfocus_gpu(void);

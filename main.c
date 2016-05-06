@@ -26,7 +26,7 @@ int     main(int argc,char *argv[])
     bus_init();
     xenstore_init();
     input_init();
-    domain_init();
+    domains_init();
     server_init();
 
     switcher_init();

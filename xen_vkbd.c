@@ -182,6 +182,7 @@ xen_vkbd_backend_create(struct domain *d)
     backend->backend = backend_register("vkbd", d->domid, &xen_vkbd_backend_ops, backend);
     if (!backend->backend)
     {
+	error("%s: failed to register VKBD backend for dom%u!", __func__, d->domid);
         free(backend);
         return;
     }

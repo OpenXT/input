@@ -131,4 +131,7 @@ enum input_device_type
     HID_TYPE_THINKPAD_ACPI
 };
 
+//#define debug 1
+//#define debug_packets 1
+
 #include "prototypes.h"

@@ -30,10 +30,14 @@ static const char NoSrcId[]   = "NoSrcUuid";
 static const char Busy[]      = "Busy";
 static const char BadFrame[]      = "BadFrame";
 static const char OutOfRange[]      = "OutOfRange";
+static const char FailVkbdAttach[] = "FailVkbdAttach";
+static const char FailVkbdDetach[] = "FailVkbdDetach";
 
 static const char BadUuid_txt[]   = "The UUID '%s' could not be found.";
 static const char NoMemory_divert_txt[] = "Could not create divert info.";
 static const char NoSrcId_txt[] = "The UUID of the caller could not be found.  (This method cannot be called from Dom0!)";
+static const char FailVkbdAttach_txt[] = "Could not attach Vkbd to dom%u.";
+static const char FailVkbdDetach_txt[] = "Could not detach Vkbd from dom%u.";
 
 gboolean
 input_daemon_set_slot(InputDaemonObject *this, gint IN_domid, gint IN_slot, GError** err)
@@ -278,9 +282,11 @@ input_daemon_switch_focus (InputDaemonObject *this, gint IN_domid, gboolean IN_f
 
     dom = domain_with_domid(IN_domid);
     if (!dom) {
+        warning("Cannot switch to dom%u, this domid is not registered.", IN_domid);
         goto out;
     }
     if (switcher_switch(dom, 0, IN_force) < 0) {
+        warning("Cannot switch to dom%u, switcher_switch() failed...", IN_domid);
         goto out;
     }
     // hooray
@@ -949,3 +955,56 @@ input_daemon_property_set_numlock_restore_on_switch(InputDaemonObject *this, gbo
     input_set_numlock_restore_on_switch(IN_value);
     return TRUE;
 }
+
+gboolean
+input_daemon_attach_vkbd(InputDaemonObject *this, gint IN_domid, GError **err)
+{
+    struct domain *d;
+
+
+    d = domain_with_domid(IN_domid);
+    if (d == NULL) {
+        d = domain_new(IN_domid);
+        if (d == NULL)
+            goto fail;
+        if (domain_setup(d))
+            goto fail_and_free_domain;
+        if (domain_set_pvm(d, false))
+            goto fail_and_free_domain;
+    }
+    if (domain_attach_vkbd(d))
+        return FALSE;
+
+    /* Update the slots[] global with what we just configured for this domain.
+     * This will send input to the vkbd frontend with little sanity checks.
+     * XXX: This is a tad convoluted.
+     */
+    focus_update_domain(d);
+
+    return TRUE;
+
+fail_and_free_domain:
+    domain_release(d);
+fail:
+    set_error(err, gI, FailVkbdAttach, FailVkbdAttach_txt, IN_domid);
+    return FALSE;
+}
+
+
+gboolean
+input_daemon_detach_vkbd(InputDaemonObject *this, gint IN_domid, GError** err)
+{
+    struct domain *d;
+
+    d = domain_with_domid(IN_domid);
+    if (d == NULL) {
+        warning("%s: Could not detach VKBD from dom%u. Dom%u does not exist.",
+                __func__, IN_domid, IN_domid);
+        set_error(err, gI, FailVkbdDetach, FailVkbdDetach_txt, IN_domid);
+        return FALSE;
+    }
+    domain_detach_vkbd(d);
+
+    return TRUE;
+}
+
