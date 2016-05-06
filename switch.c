@@ -40,29 +40,18 @@ switcher_self_switch_disabled(void)
 int
 switcher_switch_graphic(struct domain *d, int force)
 {
-    static GArray *domids = NULL;
     int rc = TRUE;
     gint domid;
 
     if (!d)
         return -1;
 
-    if (!domids)
-        domids = g_array_new (FALSE, FALSE, sizeof (gint));
-    /*4 heads should be enough for anyone :) */
-
-    g_array_set_size (domids,4); //XXX is that 4 or 4*sizeof(gint)
-    g_array_index (domids, gint, 0) = d->domid;
-    g_array_index (domids, gint, 1) = d->domid;
-    g_array_index (domids, gint, 2) = d->domid;
-    g_array_index (domids, gint, 3) = d->domid;
-
     if (switcher_self_switch_disabled() &&
         d == surface_current)
         return rc;
 
     rc = com_citrix_xenclient_surfman_set_visible_
-        (xcbus_conn, SURFMAN_SERVICE, SURFMAN_PATH, domids, 3000,
+        (xcbus_conn, SURFMAN_SERVICE, SURFMAN_PATH, d->domid, 3000,
          force ? TRUE : FALSE);
     if (rc)
         surface_current = d;
