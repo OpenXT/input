@@ -333,7 +333,8 @@ static void send_config_reset(struct domain *d, uint8_t slot)
 {
     struct msg_input_config_reset msg;
     msg.slot = slot;
-    input_config_reset(d->client, &msg, sizeof(msg));
+    if (d->client)
+        input_config_reset(d->client, &msg, sizeof(msg));
 
     if (d->plugin)
        send_plugin_dev_event(d->plugin, DEV_RESET, slot); 
