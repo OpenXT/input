@@ -423,7 +423,8 @@ switcher_get_slot_type(int slot)
 
     info("XXXX Adapter for %d : %s", slot, v);
 
-    if ((*v == '\0') || (strcasestr(v, "citrix"))) /* Citrix is the default adapter */
+    /* The default adapter is named "OpenXT Xen Display Driver" */
+    if ((*v == '\0') || (strcasestr(v, "openxt")))
       type = VIDEO_ADAPTER_DEFAULT; /* Default */
     else if (strcasestr(v, "intel"))
       type = VIDEO_ADAPTER_DEFAULT; /* Intel */

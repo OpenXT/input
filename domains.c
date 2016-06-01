@@ -322,9 +322,12 @@ domain_active_adapter_watch(const char *path, void *opaque)
     if (endptr == buff)
         return;
 
-    // graphics driver unloading for a SVM with a secondary GPU
-    if (0 == val && d->has_secondary_gpu)
-        switcher_switch_graphic(d, 0);
+    // if activeAdapter for the domain becomes 0, switch to UIVM
+    //   whether the domain has a secondary GPU or not.
+    // We can't disable the surface, because in the case of S3 it
+    //   won't get re-enabled before xenmgr tell us to switch to it.
+    if (0 == val)
+        switcher_switch(domain_uivm(), 0, 0);
 
     info("domain %d has %d active adapter(s)", d->domid, val);
     d->num_active_adapters = val;
