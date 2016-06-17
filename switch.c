@@ -607,14 +607,18 @@ switcher_init (void)
   }
 
   {
-    int ctrl_alt_backspace1[] =
-      { KEY_LEFTCTRL, KEY_LEFTALT, KEY_BACKSPACE, -1 };
-    int ctrl_alt_backspace2[] =
-      { KEY_LEFTALT, KEY_LEFTCTRL, KEY_BACKSPACE, -1 };
-    int ctrl_alt_backspace3[] =
-      { KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_BACKSPACE, -1 };
-    int ctrl_alt_backspace4[] =
-      { KEY_RIGHTALT, KEY_RIGHTCTRL, KEY_BACKSPACE, -1 };
+    /* 
+     * Login screen shortcuts.
+     * Commented out because the feature is currently broken.
+     */
+    /* int ctrl_alt_backspace1[] =
+     *   { KEY_LEFTCTRL, KEY_LEFTALT, KEY_BACKSPACE, -1 };
+     * int ctrl_alt_backspace2[] =
+     *   { KEY_LEFTALT, KEY_LEFTCTRL, KEY_BACKSPACE, -1 };
+     * int ctrl_alt_backspace3[] =
+     *   { KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_BACKSPACE, -1 };
+     * int ctrl_alt_backspace4[] =
+     *   { KEY_RIGHTALT, KEY_RIGHTCTRL, KEY_BACKSPACE, -1 }; */
     int ctrl_alt_r1[] =
       { KEY_LEFTCTRL, KEY_LEFTALT, KEY_R, -1 };
     int ctrl_alt_r2[] =
@@ -623,14 +627,18 @@ switcher_init (void)
       { KEY_RIGHTCTRL, KEY_RIGHTALT, KEY_R, -1 };
     int ctrl_alt_r4[] =
       { KEY_RIGHTALT, KEY_RIGHTCTRL, KEY_R, -1 };
-    input_add_binding (ctrl_alt_backspace1, switcher_auth_or_lock_wrapper, NULL,
-                       (void *) 0);
-    input_add_binding (ctrl_alt_backspace2, switcher_auth_or_lock_wrapper, NULL,
-                       (void *) 0);
-    input_add_binding (ctrl_alt_backspace3, switcher_auth_or_lock_wrapper, NULL,
-                       (void *) 0);
-    input_add_binding (ctrl_alt_backspace4, switcher_auth_or_lock_wrapper, NULL,
-                       (void *) 0);
+    /* 
+     * Login screen shortcuts.
+     * Commented out because the feature is currently broken.
+     */
+    /* input_add_binding (ctrl_alt_backspace1, switcher_auth_or_lock_wrapper, NULL,
+     *                    (void *) 0);
+     * input_add_binding (ctrl_alt_backspace2, switcher_auth_or_lock_wrapper, NULL,
+     *                    (void *) 0);
+     * input_add_binding (ctrl_alt_backspace3, switcher_auth_or_lock_wrapper, NULL,
+     *                    (void *) 0);
+     * input_add_binding (ctrl_alt_backspace4, switcher_auth_or_lock_wrapper, NULL,
+     *                    (void *) 0); */
     input_add_binding (ctrl_alt_r1, switcher_status_report, NULL,
                        (void *) 0);
     input_add_binding (ctrl_alt_r2, switcher_status_report, NULL,
