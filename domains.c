@@ -1316,8 +1316,8 @@ int domain_attach_vkbd(struct domain *d)
     }
     if (d->vkbd_backend != NULL) {
         error("%s: Could not attach VKBD to dom%u."
-              " Domain already has a VKBD device, input-server can only \
-              manage one per domain.");
+              " Domain already has a VKBD device, input-server can only"
+              " manage one per domain.", __func__, d->domid);
         return -EEXIST;
     }
     /* Initialise the VKBD backend with libxenbackend. */
