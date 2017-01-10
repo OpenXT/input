@@ -96,9 +96,6 @@ switcher_switch (struct domain *d, int mouse_switch, int force)
       save_prev_keyb_domain (current);
     }
 
-  if (d && d->is_in_s3)
-    domain_wake_from_s3 (d);
-
   if (d->disabled_surface)
       info ("domid:%d disabled_surface:%d", d->domid, d->disabled_surface);
 
