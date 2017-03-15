@@ -2767,6 +2767,29 @@ static int device_is_lid_switch(unsigned int bustype, const char *name)
     return ((bustype == BUS_HOST) && (strcasestr(name, "lid switch")));
 }
 
+static bool bus_is_supported(unsigned int bus)
+{
+    unsigned int buses[] = {
+        BUS_I8042, BUS_USB, BUS_RS232, BUS_I2C,
+    };
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_LEN(buses); ++i)
+        if (buses[i] == bus)
+            return true;
+    return false;
+}
+
+static bool devices_blacklist(unsigned int bustype, const char *name)
+{
+    if (device_is_acpi_video(bustype, name))
+        return true;
+    if (device_is_displaylink_touchpanel(bustype, name))
+        return true;
+
+    return false;
+}
+
 static int consider_device(int slot)
 {
     int fd = input_dev.fds[slot];
@@ -2782,13 +2805,9 @@ static int consider_device(int slot)
     if (ioctl(fd, EVIOCGID, &id) == -1)
         return -1;
 
-    if (id.bustype != BUS_I8042 && id.bustype != BUS_USB &&
-        id.bustype != BUS_RS232 && id.bustype != BUS_I2C &&
-        !(device_is_thinkpad_acpi(id.bustype, name)) &&
-        !(device_is_acpi_video(id.bustype, name)) && !(device_is_lid_switch(id.bustype, name)))
+    if (!bus_is_supported(id.bustype))
         return -1;
-
-    if (device_is_displaylink_touchpanel(id.bustype, name))
+    if (devices_blacklist(id.bustype, name))
         return -1;
 
     if (!ioctl(fd, EVIOCGRAB, current_grab))

@@ -97,6 +97,7 @@
 #define OFF(x)   ((x) % LONG_BITS)
 #define LONG(x)  ((x) / LONG_BITS)
 #define TEST_BIT(bit, array) (array[LONG(bit)] & (1 << OFF(bit)))
+#define ARRAY_LEN(arr) (sizeof (arr) / sizeof ((arr)[0]))
 
 #define BTN_WORDS 3
 #define ABS_WORDS 2
