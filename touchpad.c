@@ -948,6 +948,32 @@ static void handle_clickpad(struct touchpad_state *ts,
     }
 }
 
+/* QUIRK:
+ * Some touchpads report values outside of the boundaries they pretend to
+ * honor.  This would be handled with a quirk (e.g. hwdb + libevdev), but in
+ * this case, it would require a lot of refactoring to support something even
+ * similar.
+ * Instead, adjust limits if a value overflows by less than ~10% of the axis
+ * range. Anything above is considered spurious input (which happens with some
+ * multitouch input). */
+static void adjust_overflow(struct touchpad_packet *tp,
+                            struct touchpad_limits *tl)
+{
+    int xrange = tl->maxx - tl->minx;
+    int yrange = tl->maxy - tl->miny;
+
+    if ((tp->x > tl->maxx) && ((tp->x - (xrange / 10)) <= tl->maxx)) {
+        /* Preserve the reported zone size for lack of a better idea. */
+        tl->right_edge = tp->x - (xrange - tl->right_edge);
+        tl->maxx = tp->x;
+    }
+
+    if ((tp->y > tl->maxy) && ((tp->y - (yrange / 10)) <= tl->maxy)) {
+        tl->bottom_edge = tp->y - (yrange - tl->bottom_edge);
+        tl->maxy = tp->y;
+    }
+}
+
 static void process_packet(struct touchpad_state *ts, 
                            struct touchpad_packet *tp, 
                            struct touchpad_limits *tl, 
@@ -972,6 +998,8 @@ static void process_packet(struct touchpad_state *ts,
 
     if (tp->y == tl->no_y)
         y_value = ts->last_y;
+
+    adjust_overflow(tp, tl);
 
     edge = detect_edge(x_value, y_value, tl->right_edge, tl->bottom_edge, tl->top_edge);
 
