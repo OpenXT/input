@@ -64,6 +64,7 @@ struct touchpad_packet
     int y;                    /* X position of finger. */
     int pressure;             /* Finger pressure. */
     int button_mask;          /* Left or right button click. */
+    int btn_touch;            /* Value for BTN_TOUCH reporting contact. */
     struct timeval timestamp;
     int fingertouching;
 };
@@ -234,22 +235,27 @@ static enum edge_type detect_edge(int x, int y, int right_edge, int bottom_edge,
     return etype;
 }
 
-static int detect_finger(int pressure, struct touchpad_limits *tl)
+static int detect_finger(const struct touchpad_packet *tp, const struct touchpad_limits *tl)
 {
     static int fingertouching = 0;
     int range = tl->max_pressure - tl->min_pressure;
 
-    if (pressure == tl->no_pressure)
+    if (!range) {
+        fingertouching = tp->btn_touch;
+        return fingertouching;
+    }
+
+    if (tp->pressure == tl->no_pressure)
         return fingertouching;
 
     if (!fingertouching)
     {
-        if (pressure > (tl->min_pressure + (range * PRESSURE_UP_MULT)))
+        if (tp->pressure > (tl->min_pressure + (range * PRESSURE_UP_MULT)))
             fingertouching = 1;
     }
     else
     {
-        if (pressure < (tl->min_pressure + (range * PRESSURE_DOWN_MULT)))
+        if (tp->pressure < (tl->min_pressure + (range * PRESSURE_DOWN_MULT)))
             fingertouching = 0;
     }
 
@@ -1003,7 +1009,7 @@ static void process_packet(struct touchpad_state *ts,
 
     edge = detect_edge(x_value, y_value, tl->right_edge, tl->bottom_edge, tl->top_edge);
 
-    tp->fingertouching = detect_finger(tp->pressure, tl);
+    tp->fingertouching = detect_finger(tp, tl);
 
     if (tl->is_clickpad)
         handle_clickpad(ts, tp, tl, edge);
@@ -1058,12 +1064,13 @@ void handle_touchpad_event(struct input_event *ev,int slot)
     }
     else if (ev->type == EV_KEY)
     {
-     
         if ((ev->code >=BTN_LEFT) && (ev->code <=BTN_TASK))
-        {       
+        {
             int bitpair = (ev->code - BTN_LEFT) << 1;
             tpacket.button_mask |= 1 << ( bitpair + (ev->value?0:1));
         }
+        if (ev->code == BTN_TOUCH)
+            tpacket.btn_touch = ev->value;
     }
 }
 
