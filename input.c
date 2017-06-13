@@ -2702,49 +2702,51 @@ static int find_pointer_device_type(int fd, unsigned int bustype, uint8_t * subt
     memset(abslimits, 0, sizeof(abslimits));
     memset(keybits, 0, sizeof(abslimits));
 
-    if ((ret = ioctl(fd, EVIOCGBIT(0, sizeof(eventtypes)), eventtypes)) < 0)
+    ret = ioctl(fd, EVIOCGBIT(0, sizeof (eventtypes)), eventtypes);
+    if (ret < 0)
         return ret;
 
-    /* Check if the device supports absolute events. */
+    /* Handle all EV_REL capable devices as mice.
+     * TODO: This is inacurate, but seems to be good enough for now. */
+    if (TEST_BIT(EV_REL, eventtypes))
+        return HID_TYPE_MOUSE;
+
+    /* No EV_REL and no EV_ABS == this is not a pointing device. */
     if (!TEST_BIT(EV_ABS, eventtypes))
-        return HID_TYPE_MOUSE;
+        return -1;
+    ret = ioctl(fd, EVIOCGBIT(EV_ABS, sizeof (abslimits)), abslimits);
+    if (ret < 0)
+        return -1;
 
-    /* USB mice also support absolute events, so we need to perform
-       additional checks to determine if the device is a touchpad, or tablet. */
-    if (!TEST_BIT(EV_SYN, eventtypes) || !TEST_BIT(EV_KEY, eventtypes))
-        return HID_TYPE_MOUSE;
+    /* Do not recognize pointing devices not having at least X,Y coordinates?
+     * MT devices might report ABS_MT_POSITION?
+     * What about other coordinates? */
+    if (!TEST_BIT(ABS_X, abslimits) || !TEST_BIT(ABS_Y, abslimits))
+        return -1;
 
-    if ((ret = ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(abslimits)), abslimits)) < 0)
-        return ret;
+    /* Some touchpads report ABS_PRESSURE, but tablet don't appear to... */
+    if (TEST_BIT(ABS_PRESSURE, abslimits))
+        return HID_TYPE_TOUCHPAD;
 
-    if ((ret = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keybits)), keybits)) < 0)
-        return ret;
+    ret = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof (keybits)), keybits);
+    if (ret < 0)
+        return -1;
 
-    if (TEST_BIT(ABS_X, abslimits) && TEST_BIT(ABS_Y, abslimits))
-    {
-/* Touchpads can be USB!  BTN_TOOL_FINGER can be used to tell its a touchpad.  However, by correctly 
-identifying that the wacom bamboo touchpad is a touchpad, it stops it working.  So for now its better to work wrongly */
+    /* ... when they don't, legacy used to consider BTN_TOUCH &
+     * BTN_TOOL_FINGER as touchpads.  This should be good enough since there is
+     * no "touch-screen" type in input-server yet. */
+    if (TEST_BIT(BTN_TOOL_FINGER, keybits) && TEST_BIT(BTN_TOUCH, keybits))
+        return HID_TYPE_TOUCHPAD;
 
-/*        if (((bustype == BUS_I8042) || (TEST_BIT(BTN_TOOL_FINGER, keybits))) && */
-        if (((bustype == BUS_I8042)) && (TEST_BIT(ABS_PRESSURE, abslimits)))
-            return HID_TYPE_TOUCHPAD;
+    /* From there, this device is considered a tablet.
+     * Assume PEN or FINGER will be enough to have discrepancy between tablet
+     * sub-types. */
+    if (TEST_BIT(BTN_TOOL_PEN, keybits))
+        *subtype = SUBTYPE_STYLUS;
+    if (TEST_BIT(BTN_TOOL_FINGER, keybits))
+        *subtype = SUBTYPE_MONOTOUCH;
 
-        if ((bustype == BUS_USB) || (bustype == BUS_RS232) || bustype == BUS_I2C)
-        {
-            if (TEST_BIT(BTN_TOOL_PEN, keybits))
-            {
-                *subtype = SUBTYPE_STYLUS;
-            }
-            if (TEST_BIT(BTN_TOOL_FINGER, keybits))
-            {
-                *subtype = SUBTYPE_MONOTOUCH;
-            }
-        }
-
-        return HID_TYPE_TABLET;
-    }
-
-    return HID_TYPE_MOUSE;
+    return HID_TYPE_TABLET;
 }
 
 static int device_is_thinkpad_acpi(unsigned int bustype, const char *name)
@@ -2767,6 +2769,29 @@ static int device_is_lid_switch(unsigned int bustype, const char *name)
     return ((bustype == BUS_HOST) && (strcasestr(name, "lid switch")));
 }
 
+static bool bus_is_supported(unsigned int bus)
+{
+    unsigned int buses[] = {
+        BUS_I8042, BUS_USB, BUS_RS232, BUS_I2C,
+    };
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_LEN(buses); ++i)
+        if (buses[i] == bus)
+            return true;
+    return false;
+}
+
+static bool devices_blacklist(unsigned int bustype, const char *name)
+{
+    if (device_is_acpi_video(bustype, name))
+        return true;
+    if (device_is_displaylink_touchpanel(bustype, name))
+        return true;
+
+    return false;
+}
+
 static int consider_device(int slot)
 {
     int fd = input_dev.fds[slot];
@@ -2782,13 +2807,9 @@ static int consider_device(int slot)
     if (ioctl(fd, EVIOCGID, &id) == -1)
         return -1;
 
-    if (id.bustype != BUS_I8042 && id.bustype != BUS_USB &&
-        id.bustype != BUS_RS232 && id.bustype != BUS_I2C &&
-        !(device_is_thinkpad_acpi(id.bustype, name)) &&
-        !(device_is_acpi_video(id.bustype, name)) && !(device_is_lid_switch(id.bustype, name)))
+    if (!bus_is_supported(id.bustype))
         return -1;
-
-    if (device_is_displaylink_touchpanel(id.bustype, name))
+    if (devices_blacklist(id.bustype, name))
         return -1;
 
     if (!ioctl(fd, EVIOCGRAB, current_grab))
