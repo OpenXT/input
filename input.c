@@ -2724,18 +2724,15 @@ static int find_pointer_device_type(int fd, unsigned int bustype, uint8_t * subt
     if (!TEST_BIT(ABS_X, abslimits) || !TEST_BIT(ABS_Y, abslimits))
         return -1;
 
-    /* Some touchpads report ABS_PRESSURE, but tablet don't appear to... */
-    if (TEST_BIT(ABS_PRESSURE, abslimits))
-        return HID_TYPE_TOUCHPAD;
-
     ret = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof (keybits)), keybits);
     if (ret < 0)
         return -1;
 
-    /* ... when they don't, legacy used to consider BTN_TOUCH &
-     * BTN_TOOL_FINGER as touchpads.  This should be good enough since there is
-     * no "touch-screen" type in input-server yet. */
-    if (TEST_BIT(BTN_TOOL_FINGER, keybits) && TEST_BIT(BTN_TOUCH, keybits))
+    /* Legacy used to consider BTN_TOUCH & BTN_TOOL_FINGER as touchpads.
+     * Exclude touch-screens that ought to be seen as tablet by input_server.
+     * These should have BTN_TOOL_PEN and/or BTN_STYLUS. */
+    if (TEST_BIT(BTN_TOUCH, keybits) && TEST_BIT(BTN_TOOL_FINGER, keybits) &&
+	!TEST_BIT(BTN_TOOL_PEN, keybits) && !TEST_BIT(BTN_STYLUS, keybits))
         return HID_TYPE_TOUCHPAD;
 
     /* From there, this device is considered a tablet.
