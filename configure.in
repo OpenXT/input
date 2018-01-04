@@ -47,7 +47,8 @@ AM_INIT_AUTOMAKE($PACKAGE,$VERSION)
 
 AC_ARG_WITH(idldir,AC_HELP_STRING([--with-idldir=PATH],[Path to dbus idl desription files]),
                 IDLDIR=$with_idldir,IDLDIR=/usr/share/idl)
-
+AC_ARG_WITH(rpcgen-templates,AC_HELP_STRING([--with-rpcgen-templates=PATH],[Path to xc-rpcgen template files]),
+                RPCGEN_TEMPLATES=$with_rpcgen_templates,RPCGEN_TEMPLATES=)
 AC_SUBST(IDLDIR)
 AC_SUBST(RPCGEN_TEMPLATES)
 
