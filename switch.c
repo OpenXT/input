@@ -208,7 +208,7 @@ switch_to_slot (int slot, int mouse_switch, int force)
 static int
 force_go_to_slot (void *slotp)
 {
-  int slot = (int) slotp;
+  int slot = (long) slotp;
 
   if (auth_get_context ()) {
       info ("auth in progress, keyboard switching is blocked");
@@ -222,7 +222,7 @@ force_go_to_slot (void *slotp)
 static int
 go_to_slot (void *slotp)
 {
-  int slot = (int) slotp;
+  int slot = (long) slotp;
 
   info("go to slot %d",slot);
   switch_to_slot (slot, 0, 0);
@@ -583,7 +583,7 @@ switcher_switch_right(void)
 void
 switcher_init (void)
 {
-  int i;
+  long i;
   struct stat unused;
 
 #if 0

@@ -29,7 +29,7 @@
 struct sock_plugin buffers;
 
 static struct event server_accept_event;
-static int server_sock_fd;
+static long server_sock_fd;
 
 static void process_event(struct event_record* r, struct sock_plugin* b);
 void send_event(struct sock_plugin* plug, int t, int c, int v);
@@ -545,7 +545,7 @@ void send_event(struct sock_plugin* plug, int t, int c, int v)
 
 static void server_accept(int fd, short event, void *opaque)
   {
-  int s = (int)opaque;
+  int s = (long)opaque;
   int s2;
   socklen_t t;
   struct sockaddr_un remote;

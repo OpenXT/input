@@ -38,7 +38,7 @@ static void wrapper_input_read(int fd, short event, void *opaque);
 static void wrapper_force_timer(int fd, short event, void *opaque);
 static void wrapper_input_lock_timer(int fd, short event, void *opaque);
 static void send_config(struct domain *d, int slot);
-static void broadcast_config(int slot);
+static void broadcast_config(long slot);
 static int input_check_secure_mode();
 static void dup_mouse_clicks(struct domain* d);
 static int check_mouse_keys(struct domain* d, int slot, struct input_event* e);
@@ -415,7 +415,7 @@ static int anyset(unsigned long *keybit)
 
 static void send_config_wrap(struct domain *d, void *o)
 {
-    int slot = (int) o;
+    int slot = (long) o;
     send_config(d, slot);
     if (d->plugin)
         send_plugin_dev_event(d->plugin, DEV_CONF, slot);
@@ -423,16 +423,16 @@ static void send_config_wrap(struct domain *d, void *o)
 
 static void send_config_reset_wrap(struct domain *d, void *o)
 {
-    uint8_t slot = (int) o;
+    uint8_t slot = (long) o;
     send_config_reset(d, slot);
 }
 
-static void broadcast_removed_dev(int slot)
+static void broadcast_removed_dev(long slot)
 {
     iterate_domains(send_config_reset_wrap, (void *) slot);
 }
 
-static void broadcast_config(int slot)
+static void broadcast_config(long slot)
 {
     iterate_domains(send_config_wrap, (void *) slot);
 }
@@ -517,7 +517,7 @@ static void send_config(struct domain *d, int slot)
 
 
     /* Ugly fix instead of cast to uint64_t */
-    if (absbit[0] == 0 && absbit[1] == 0)
+    if (absbit[0] == 0)
         abssize = 0;
 
 
@@ -2449,7 +2449,7 @@ static void input_lock_timer(void *opaque)
     if (!event_initialized(&lock_event))
         event_set(&lock_event, -1, EV_TIMEOUT | EV_PERSIST, wrapper_input_lock_timer, (void *) 1);
 
-    if ((int) opaque == 0)
+    if ((long) opaque == 0)
         timeout = 0;
     if (platform_lock_timeout == -1)
     {
@@ -2464,7 +2464,7 @@ static void input_lock_timer(void *opaque)
         timeout = 0;
         switcher_lock(0);
     }
-    if ((int) opaque == 1)
+    if ((long) opaque == 1)
         timeout += 5;
     tv.tv_sec += 5;
     evtimer_add(&lock_event, &tv);
@@ -2491,7 +2491,7 @@ void check_and_inject_event(struct input_event *e, int slot, enum input_device_t
 
 static void input_read(void *opaque)
 {
-    int slot = (int) opaque;
+    int slot = (long) opaque;
     struct input_event event[64];
     unsigned int i = 0;
     int read_sz = 0;
@@ -2785,7 +2785,7 @@ static bool devices_blacklist(unsigned int bustype, const char *name)
     return false;
 }
 
-static int consider_device(int slot)
+static int consider_device(long slot)
 {
     int fd = input_dev.fds[slot];
     int ret = 0;
