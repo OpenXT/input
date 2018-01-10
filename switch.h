@@ -40,7 +40,7 @@ struct domain
     bool                    initialised;
     dmbus_client_t          client;
     int                     domid;
-    int                     slot;
+    long                    slot;
     int                     keyboard_led_code;
     int                     is_pvm;
     int                     is_in_s3;
