@@ -305,7 +305,7 @@ static void
 domain_active_adapter_watch(const char *path, void *opaque)
 {
     struct domain *d = opaque;
-    char *buff = NULL, *endptr, node_name[32];
+    char *buff = NULL, *endptr, node_name[33];
     long int val = 0;
     int i;
 
