@@ -293,8 +293,8 @@ static inputevent_action demultitouch(struct input_event *e)
 
                     return discared_event;
                 }
-                break;
             }
+            break;
         case ABS_MT_SLOT:
             slot = e->value;
 
@@ -309,6 +309,7 @@ static inputevent_action demultitouch(struct input_event *e)
                 }
                 return discared_event;
             }
+            break;
         case ABS_MT_TOUCH_MAJOR:
         case ABS_MT_TOUCH_MINOR:
         case ABS_MT_WIDTH_MAJOR:
