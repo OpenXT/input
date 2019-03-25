@@ -24,21 +24,8 @@ extern struct timeval global_last_input_event;
 
 static struct domain domains[NDOMAIN_MAX];
 
-static const int one=1;
-static const int zero=0;
 static xc_interface *xc_handle = NULL;
 static bool destroy_in_fork = false;
-
-static struct domain *__domain_with(int offset, unsigned int size, const void *arg)
-{
-    int         i;
-
-    for (i = 0; i < NDOMAIN_MAX; i++)
-        if (domains[i].initialised &&
-                !memcmp((char*)&domains[i] + offset, arg, size))
-            return &domains[i];
-    return NULL;
-}
 
 void domain_print(const struct domain *d)
 {
@@ -68,13 +55,6 @@ void domains_print(void)
     for (i = 0; i < NDOMAIN_MAX; ++i)
         domain_print(&domains[i]);
 }
-
-#define domain_with(_field_, _arg_)                                     \
-    __domain_with( 							\
-            offsetof(struct domain, _field_), 			\
-            sizeof ( ((struct domain *) NULL)->_field_ ), 		\
-            (_arg_)							\
-            )
 
 void iterate_domains(void (*callback)(struct domain *,void*), void* opaque)
 {
@@ -126,12 +106,24 @@ static struct domain *empty_domain()
 
 struct domain *domain_with_domid(int domid)
 {
-    return domain_with(domid,&domid);
+    int i;
+    for (i = 0; i < NDOMAIN_MAX; ++i) {
+        if (domains[i].initialised &&
+            domains[i].domid == domid)
+            return &domains[i];
+    }
+    return NULL;
 }
 
 struct domain * domain_with_slot(int slot)
 {
-    return domain_with(slot,&slot);
+    int i;
+    for (i = 0; i < NDOMAIN_MAX; ++i) {
+        if (domains[i].initialised &&
+            domains[i].slot == slot)
+            return &domains[i];
+    }
+    return NULL;
 }
 
 struct domain *domain_with_uuid(const char *uuid)
@@ -154,7 +146,13 @@ struct domain * domain_uivm(void)
 
 struct domain * domain_pvm(void)
 {
-    return domain_with(is_pvm,&one);
+    int i;
+    for (i = 0; i < NDOMAIN_MAX; ++i) {
+        if (domains[i].initialised &&
+            domains[i].is_pvm)
+            return &domains[i];
+    }
+    return NULL;
 }
 
 
@@ -567,7 +565,7 @@ static void domain_slot_watch(const char *path, void *opaque)
     slot = strtol(tmp, NULL, 10);
     free(tmp);
 
-    if ((d_slot = domain_with(slot, &slot)))
+    if ((d_slot = domain_with_slot(slot))
     {
         error("There is already a domain on this slot, %d\n", d_slot->domid);
         return;
@@ -615,7 +613,7 @@ static void domain_command(const char *path, void *opaque)
     }
     else if (sscanf(tmp, "switch domid %d", &domid) == 1)
     {
-        struct domain   *s = domain_with(domid,  &domid);
+        struct domain   *s = domain_with_domid(domid);
         if (!s)
         {
             error("domain %d doesn't exist", domid);
@@ -629,7 +627,7 @@ static void domain_command(const char *path, void *opaque)
     }
     else if (sscanf(tmp, "keyboard take %d", &domid) == 1)
     {
-        struct domain *src_domain = domain_with(domid, &domid);
+        struct domain *src_domain = domain_with_domid(domid);
         if (!src_domain)
         {
             error("domain %d doesn't exist", domid);
@@ -643,7 +641,7 @@ static void domain_command(const char *path, void *opaque)
     }
     else if (sscanf(tmp, "keyboard release %d", &domid) == 1)
     {
-        struct domain *dest_domain = domain_with(domid, &domid);
+        struct domain *dest_domain = domain_with_domid(domid);
         if (!dest_domain)
         {
             error("domain %d doesn't exist", domid);
@@ -859,7 +857,7 @@ static void switcher_domid(struct domain *d, uint32_t domid)
   int slot;
   struct domain       *d_pvm;
 
-  if (domain_with(domid,&domid))
+  if (domain_with_domid(domid))
     {
       error("domain %d already exists", domid);
       return;
@@ -883,10 +881,10 @@ static void switcher_domid(struct domain *d, uint32_t domid)
   if(slot_occupied_by_dead_domain(slot))
   {
       warning("slot %d is held by a dead domain; cleaning up", slot);
-      domain_gone(domain_with(slot, &slot));
+      domain_gone(domain_with_slot(slot));
   }
 
-  if (domain_with(slot,&slot) || (slot == -1))
+  if (domain_with_slot(slot) || (slot == -1))
   {
       error("slot %d already taken (wanted by domain %d)",slot,domid);
       return;
@@ -933,7 +931,7 @@ static void switcher_domid(struct domain *d, uint32_t domid)
           warning("failed to install xenstore watch! power-state");
   domain_power_state("power-state",d);
 
-  d_pvm = domain_with(is_pvm, &one);
+  d_pvm = domain_pvm();
   domain_surface_disabled_detect_init(d);
 
   xen_vkbd_backend_create(d);
