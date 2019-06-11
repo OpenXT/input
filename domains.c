@@ -126,6 +126,19 @@ struct domain * domain_with_slot(int slot)
     return NULL;
 }
 
+
+struct domain * domain_with_slot_and_not_domid(int slot, int domid)
+{
+    int i;
+    for (i = 0; i < NDOMAIN_MAX; ++i) {
+        if (domains[i].initialised &&
+            domains[i].slot == slot &&
+            domains[i].domid != domid)
+            return &domains[i];
+    }
+    return NULL;
+}
+
 struct domain *domain_with_uuid(const char *uuid)
 {
     int i;
@@ -787,14 +800,13 @@ static void domain_calculate_abs_scaling(const char *path, void *opaque)
  *  Returns a non-zero value if this slot is occuped by a left-over domain.
  *
  */
-static int slot_occupied_by_dead_domain(int slot)
+static int slot_occupied_by_dead_domain(int slot, int domid)
 {
     int dying, ret;
     xc_dominfo_t info;
     char * reported_domid;
 
     struct domain * d;
-
     //If we've been passed the special slot -1, vacuously return false;
     //this is an indication that a domain has no real slot (and thus can't
     //occupy a slot).
@@ -802,13 +814,23 @@ static int slot_occupied_by_dead_domain(int slot)
         return 0;
     }
 
-    d = domain_with_slot(slot);
+    d = domain_with_slot_and_not_domid(slot, domid);
 
+    //Some other domain, likely dead, occupies this slot, deal with it
+    if (d) {
+        ret = xc_domain_getinfo(xc_handle, d->domid, 1, &info);
+        //Xen couldn't find the domain or the domain info it returned is not
+        //the domain we asked for, so it has NO idea about it.
+        if(ret != 1 || (int)info.domid != d->domid) {
+            return 1;
+        }
+    }
+
+    d = domain_with_slot(slot);
     //If no domain occupies this slot, it can't be occupied by a dead one.
     if(!d) {
         return 0;
     }
-
 
     //Ask xen for information about the domain...
     ret = xc_domain_getinfo(xc_handle, d->domid, 1, &info);
@@ -878,10 +900,10 @@ static void switcher_domid(struct domain *d, uint32_t domid)
   // This safeguard function isn't strictly neccessary, but it's lightweight
   // and prevents some awful behavior (including huge delays) if developers do
   // manage to do fun things like kernel panic their stubdomains.
-  if(slot_occupied_by_dead_domain(slot))
+  if(slot_occupied_by_dead_domain(slot, domid))
   {
       warning("slot %d is held by a dead domain; cleaning up", slot);
-      domain_gone(domain_with_slot(slot));
+      domain_gone(domain_with_slot_and_not_domid(slot, domid));
   }
 
   if (domain_with_slot(slot) || (slot == -1))
@@ -1211,10 +1233,10 @@ int domain_assign_slot(struct domain *d)
         return -EINVAL;
     }
     /* Salvage forgotten slots from dead-domains. */
-    if (slot_occupied_by_dead_domain(slot)) {
+    if (slot_occupied_by_dead_domain(slot, d->domid)) {
         warning("%s: Slot %d is held by a dead domain, clean-up.",
                 __func__, slot);
-        domain_gone(domain_with_slot(slot));
+        domain_gone(domain_with_slot_and_not_domid(slot, d->domid));
     }
     /* Domain<->Slot has to be unique. */
     if (domain_with_slot(slot) || (slot < 0)) {
