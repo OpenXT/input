@@ -107,39 +107,39 @@ ORIG_CPPFLAGS="${CPPFLAGS}"
 LDFLAGS="${ORIG_LDFLAGS}"
 CPPFLAGS="${ORIG_CPPFLAGS}"
 
-# libv4v
+# libargo
 
-AC_ARG_WITH([libv4v],
- AC_HELP_STRING([--with-libv4v=PATH], [Path to prefix where libv4v was installed.]),
- [LIBV4V_PREFIX=$with_libv4v], [])
+AC_ARG_WITH([libargo],
+ AC_HELP_STRING([--with-libargo=PATH], [Path to prefix where libargo was installed.]),
+ [LIBARGO_PREFIX=$with_libargo], [])
 
-case "x$LIBV4V_PREFIX" in
+case "x$LIBARGO_PREFIX" in
  x|xno|xyes)
- LIBV4V_INC=""
- LIBV4V_LIB="-lv4v"
+ LIBARGO_INC=""
+ LIBARGO_LIB="-largo"
  ;;
  *)
- LIBV4V_INC="-I${LIBV4V_PREFIX}/include"
- LIBV4V_LIB="-L${LIBV4V_PREFIX}/lib -lv4v"
+ LIBARGO_INC="-I${LIBARGO_PREFIX}/include"
+ LIBARGO_LIB="-L${LIBARGO_PREFIX}/lib -largo"
  ;;
 esac
 
-AC_SUBST(LIBV4V_INC)
-AC_SUBST(LIBV4V_LIB)
+AC_SUBST(LIBARGO_INC)
+AC_SUBST(LIBARGO_LIB)
 
-have_libv4v=true
+have_libargo=true
 
 ORIG_LDFLAGS="${LDFLAGS}"
 ORIG_CPPFLAGS="${CPPFLAGS}"
- LDFLAGS="${LDFLAGS} ${LIBV4V_LIB}"
- CPPFLAGS="${CPPFLAGS} ${LIBV4V_INC}"
- AC_CHECK_HEADERS([libv4v.h], [], [have_libv4v=false])
- AC_CHECK_FUNC(v4v_socket, [], [have_libv4v=false])
+ LDFLAGS="${LDFLAGS} ${LIBARGO_LIB}"
+ CPPFLAGS="${CPPFLAGS} ${LIBARGO_INC}"
+ AC_CHECK_HEADERS([libargo.h], [], [have_libargo=false])
+ AC_CHECK_FUNC(argo_socket, [], [have_libargo=false])
 LDFLAGS="${ORIG_LDFLAGS}"
 CPPFLAGS="${ORIG_CPPFLAGS}"
 
-if test "x$have_libv4v" = "xfalse"; then
- AC_MSG_ERROR([where is libv4v dude])
+if test "x$have_libargo" = "xfalse"; then
+ AC_MSG_ERROR([where is libargo dude])
 fi
 
 
@@ -167,8 +167,8 @@ have_libdmbus=true
 
 ORIG_LDFLAGS="${LDFLAGS}"
 ORIG_CPPFLAGS="${CPPFLAGS}"
- LDFLAGS="${LDFLAGS} ${LIBV4V_LIB} ${LIBDMBUS_LIB}"
- CPPFLAGS="${CPPFLAGS} ${LIBV4V_INC} ${LIBDMBUS_INC}"
+ LDFLAGS="${LDFLAGS} ${LIBARGO_LIB} ${LIBDMBUS_LIB}"
+ CPPFLAGS="${CPPFLAGS} ${LIBARGO_INC} ${LIBDMBUS_INC}"
  AC_CHECK_HEADERS([libdmbus.h], [], [have_libdmbus=false])
  AC_CHECK_FUNC(dmbus_init, [], [have_libdmbus=false])
 LDFLAGS="${ORIG_LDFLAGS}"
