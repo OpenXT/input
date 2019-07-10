@@ -696,7 +696,15 @@ domain_read_is_pv_domain(struct domain *d)
         return;
     }
 
-    d->is_pv_domain = !info.hvm;
+    /* For input-daemon, PVHv2 and PV guests are the same (vkbd, no controller emulation).
+     * This second test is the only way we have on 4.12 to differenciate
+     * through xc_domain_getinfo between HVM and PVHv2.
+     * Also, it is true on x86 only, LAPIC emulation is hard set by libxl
+     * (libxl_x86.c) and PVHv2 can only request LAPIC emulation, so no other
+     * flag can be set (xen/arch/x86/domain.c:arch_domain_create). */
+    d->is_pv_domain =
+           !info.hvm
+        || (info.hvm && (info.arch_config.emulation_flags == XEN_X86_EMU_LAPIC));
 }
 
 static void
