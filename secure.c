@@ -294,13 +294,13 @@ void auth_window(int show)
 
     if (show) {
         /* request GUI to popup midori authentication window, ho! */
-        xenstore_write("http://1.0.0.0/auth.html", url_node);
-        xenstore_write_int(1, state_node);
+        xenstore_write("http://1.0.0.0/auth.html", "%s", url_node);
+        xenstore_write_int(1, "%s", state_node);
         sprintf(perm, "n%d", uivm->domid);
-        xenstore_chmod (perm, 1, state_node);
+        xenstore_chmod (perm, 1, "%s", state_node);
     } else {
         /* close midori window */
-        xenstore_write_int(0, state_node);
+        xenstore_write_int(0, "%s", state_node);
     }
 }
 
@@ -313,7 +313,7 @@ int auth_window_shown()
 
     sprintf(state_node, "/local/domain/%d/login/state", uivm->domid);
 
-    v = xenstore_read(state_node);
+    v = xenstore_read("%s", state_node);
 
     if (v)
     {
