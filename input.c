@@ -1852,7 +1852,7 @@ static void input_led(int onoff, int led)
             ev.type = EV_LED;
             ev.code = led;
             ev.value = onoff;
-            write(input_dev.fds[i], &ev, sizeof(struct input_event));
+            (void)!write(input_dev.fds[i], &ev, sizeof(struct input_event));
         }
 }
 
