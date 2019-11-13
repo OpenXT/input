@@ -267,7 +267,7 @@ domain_active_adapter_node_watch(const char *path, void *opaque)
 
     whitelist_drivers = domain_get_whitelist_drivers();
 
-    buff = xenstore_read(path);
+    buff = xenstore_read("%s", path);
     if (!buff || strlen(buff) == 0)
         goto out;
 
@@ -343,7 +343,7 @@ domain_active_adapter_watch(const char *path, void *opaque)
     {
         sprintf(node_name, "%s/%d", DOMAIN_ACTIVE_ADAPTER_NODE, i);
         info ("watching node %s\n", node_name);
-        if (!xenstore_dom_watch(d->domid, domain_active_adapter_node_watch, d, node_name))
+        if (!xenstore_dom_watch(d->domid, domain_active_adapter_node_watch, d, "%s", node_name))
                 warning("failed to install xenstore watch! %s", node_name);
     }
 }
@@ -382,7 +382,7 @@ static void release_xs_watches(struct domain *d)
     for (i = 0; i < d->num_active_adapters; ++i) {
         char node[256];
         snprintf(node, sizeof(node), "%s/%d", DOMAIN_ACTIVE_ADAPTER_NODE, i);
-        xenstore_dom_watch(d->domid, NULL, NULL, node);
+        xenstore_dom_watch(d->domid, NULL, NULL, "%s", node);
     }
     xenstore_dom_watch(d->domid, NULL, NULL, "power-state");
     xenstore_dom_watch(d->domid, NULL, NULL, "switcher/command");
@@ -486,7 +486,7 @@ static void domain_power_state(const char *path, void *opaque)
         return;
     }
 
-    tmp = xenstore_read(path);
+    tmp = xenstore_read("%s", path);
     if (!tmp || strlen(tmp) == 0) {
         free(tmp);
         return;
@@ -597,7 +597,7 @@ static void domain_command(const char *path, void *opaque)
     int                 slot;
     int                 domid;
 
-    tmp = xenstore_read(path);
+    tmp = xenstore_read("%s", path);
     if (!tmp)
         return;
 
@@ -663,7 +663,7 @@ static void domain_command(const char *path, void *opaque)
         input_return_keyboard_to_domain(dest_domain, d);
     }
 
-    xenstore_write("", path);
+    xenstore_write("", "%s", path);
     free(tmp);
 }
 
@@ -771,7 +771,7 @@ static void domain_calculate_abs_scaling(const char *path, void *opaque)
     d->rel_x_mult = MAX_MOUSE_ABS_X / DEFAULT_RESOLUTION_X;
     d->rel_y_mult = MAX_MOUSE_ABS_Y / DEFAULT_RESOLUTION_Y;
 
-    buff = xenstore_read(path);
+    buff = xenstore_read("%s", path);
     if (!buff || strlen(buff) == 0)
     {
         info("No desktopDimensions node for domain %d", d->domid);
@@ -932,12 +932,12 @@ static void switcher_domid(struct domain *d, uint32_t domid)
       sprintf(perm, "n%d", domid);
 
       sprintf(path, "/local/domain/%d/report/state", domid);
-      xenstore_write_int(3, path);
-      xenstore_chmod(perm, 1, path);
+      xenstore_write_int(3, "%s", path);
+      xenstore_chmod(perm, 1, "%s", path);
 
       sprintf(path, "/local/domain/%d/report/url", domid);
-      xenstore_write("http://1.0.0.0/create_report.html", path);
-      xenstore_chmod (perm, 1, path);
+      xenstore_write("http://1.0.0.0/create_report.html", "%s", path);
+      xenstore_chmod (perm, 1, "%s", path);
   }
 
   xenstore_dom_write(domid, "", "switcher/command");
@@ -1293,12 +1293,12 @@ int domain_setup(struct domain *d)
 
         sprintf(perm, "n%d", d->domid);
         sprintf(path, "/local/domain/%d/report/state", d->domid);
-        xenstore_write_int(3, path);
-        xenstore_chmod(perm, 1, path);
+        xenstore_write_int(3, "%s", path);
+        xenstore_chmod(perm, 1, "%s", path);
 
         sprintf(path, "/local/domain/%d/report/url", d->domid);
-        xenstore_write("http://1.0.0.0/create_report.html", path);
-        xenstore_chmod(perm, 1, path);
+        xenstore_write("http://1.0.0.0/create_report.html", "%s", path);
+        xenstore_chmod(perm, 1, "%s", path);
     }
 
     /* Watch on node attr/desktopDimensions for resize events?

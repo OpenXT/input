@@ -73,7 +73,7 @@ char *get_configured_keymap( void )
 
     f = fopen(KEYMAP_CONF_FILE, "r");
     if (!f) goto error;
-    fgets(line, sizeof(line), f);
+    if (fgets(line, sizeof(line), f) == NULL) goto error;
 
     char *text = strstr(line, "KEYBOARD='");
     if (!text) goto error;

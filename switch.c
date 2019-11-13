@@ -344,7 +344,7 @@ static int report_window_shown()
 
     sprintf(state_node, "/local/domain/%d/report/state", uivm->domid);
 
-    v = xenstore_read(state_node);
+    v = xenstore_read("%s", state_node);
 
     if (v)
     {
@@ -385,9 +385,9 @@ static int switcher_status_report (void *opaque)
     return 0;
 
   sprintf(path, "/local/domain/%d/report/state", d->domid);
-  xenstore_write_int(1, path);
+  xenstore_write_int(1, "%s", path);
   sprintf(path, "/local/domain/%d/report/url", d->domid);
-  xenstore_write("http://1.0.0.0/create_report.html", path);
+  xenstore_write("http://1.0.0.0/create_report.html", "%s", path);
   return 0;
 }
 
@@ -403,7 +403,6 @@ static enum video_adapter
 switcher_get_slot_type(int slot)
 {
     struct domain *d;
-    char display_node[64];
     char *v;
     int type;
 
@@ -413,8 +412,7 @@ switcher_get_slot_type(int slot)
     if (!d)
         return VIDEO_ADAPTER_DOMAIN_GONE;
 
-    sprintf(display_node, "/local/domain/%d/display/activeAdapter/0", d->domid);
-    v = xenstore_read(display_node);
+    v = xenstore_read("/local/domain/%d/display/activeAdapter/0", d->domid);
     if (!v)
       return VIDEO_ADAPTER_DEFAULT;
 
@@ -547,7 +545,7 @@ switcher_watch_ac (const char *path, void *opaque)
   int ac = 0;
   char *tmp;
 
-  if (!(tmp = xenstore_read (path)))
+  if (!(tmp = xenstore_read ("%s", path)))
     return;
   ac = strtol (tmp, NULL, 10);
   free (tmp);
