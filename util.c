@@ -113,15 +113,11 @@ message (int flags, const char *file, const char *function, int line,
         const char *fmt, ...)
 {
     char buf[1024]={0};
-    char *level = NULL;
+    const char *level = "Info";
     va_list ap;
     int len;
 
-    if (flags & MESSAGE_INFO)
-    {
-        level = "Info";
-    }
-    else if (flags & MESSAGE_WARNING)
+    if (flags & MESSAGE_WARNING)
     {
         level = "Warning";
     }
