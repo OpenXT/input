@@ -228,9 +228,7 @@ domain_get_whitelist_drivers()
               ? (end-beg)
               : (int)strlen(beg);
         if (sz > 0) {
-            driver[dri] = malloc(sz+1);
-            strncpy(driver[dri], beg, sz);
-            driver[dri][sz] = 0;
+            driver[dri] = strndup(beg, sz);
             ++dri;
         }
 
