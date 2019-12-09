@@ -263,8 +263,8 @@ error:
 
 void auth_set_context(const char *user, const char *title, uint32_t flags)
 {
-    strncpy(g_auth_context.user, user, sizeof(g_auth_context.user));
-    strncpy(g_auth_context.title, title, sizeof(g_auth_context.title));
+    memmove(g_auth_context.user, user, sizeof(g_auth_context.user));
+    memmove(g_auth_context.title, title, sizeof(g_auth_context.title));
     g_auth_context.flags = flags;
     info("auth_set_context flags=%u\n", flags);
     g_auth_context_present = 1;

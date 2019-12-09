@@ -361,58 +361,6 @@ void input_set_focus_change(void)
         }
 }
 
-/* Our drivers seem to claim capabilities they do not have, in order to satisfy legacy behavior */
-/* This code tries to correct for this */
-
-void fixabsbits(uint64_t * bits)
-{
-    if (*bits & ((uint64_t) 1 << ABS_MT_POSITION_X))
-        *bits &= ~(1 << ABS_X);
-    if (*bits & ((uint64_t) 1 << ABS_MT_POSITION_Y))
-        *bits &= ~(1 << ABS_Y);
-}
-
-void fixkeybits(unsigned long *keybits, uint64_t * absbits, int slot)
-{
-    int key;
-    unsigned long *kb;
-    unsigned long bit;
-    if (input_dev.types[slot] == HID_TYPE_TOUCHPAD)
-    { // crear out any keys that don't look like mouse keys
-        keybits[2] = 0;
-        keybits[0] &= ~ (unsigned long)0x1FF;
-    } else
-
-    if ((*absbits & ((uint64_t) 1 << ABS_MT_POSITION_X)) && (*absbits & ((uint64_t) 1 << ABS_MT_POSITION_Y)))
-    {
-        info("Clearing btn_touch for multitouch device.\n");
-        bit = 1 << OFF(key = BTN_TOUCH - BTN_MISC);
-        keybits[LONG(key)] &= ~ bit;
-    }
-}
-
-int relbits_to_absbits(struct domain *d, unsigned long *relbits, uint64_t * absbits)
-{
-
-    if ((*relbits & (1 << REL_X)) && (*relbits & (1 << REL_Y)))
-    {
-        *relbits &= ~((1 << REL_Y) | (1 << REL_X));
-        *absbits |= ((1 << ABS_Y) | (1 << ABS_X));
-        return 1;
-    }
-    return 0;
-}
-
-static int anyset(unsigned long *keybit)
-{
-    int i, a;
-    a = 0;
-    for (i = 0; i < BTN_WORDS; i++)
-        a |= keybit[i];
-    return a;
-}
-
-
 static void send_config_wrap(struct domain *d, void *o)
 {
     int slot = (long) o;
@@ -439,154 +387,160 @@ static void broadcast_config(long slot)
 
 static void send_config(struct domain *d, int slot)
 {
+    int rc = 0;
+    size_t i;
+    int fd = input_dev.fds[slot];
+    enum input_device_type type = input_dev.types[slot];
+    unsigned long eventtypes[NBITS(EV_MAX)];
+    unsigned long abslimits[NBITS(ABS_MAX)];
+    unsigned long rellimits[NBITS(REL_MAX)];
+    /* Pick KEY_OK as the limit of what we're interested in. KEY_MAX includes
+     * more than double that. */
+    unsigned long keylimits[NBITS(KEY_OK)];
+    struct msg_input_config *msg;
+    size_t msg_size = 0;
+    unsigned char *raw;
+
+    /* QEMU is the only consumer. */
     if (!d || d->is_pv_domain)
         return;
 
-    int fd = input_dev.fds[slot];
-    int ret = 0;
-    int is_touchpad=(input_dev.types[slot] == HID_TYPE_TOUCHPAD);
-
-
-    unsigned long eventtypes[NBITS(EV_MAX)];
-
-    if ((ret = ioctl(fd, EVIOCGBIT(0, sizeof(eventtypes)), eventtypes)) < 0)
-    {
-        info("Could not get evbits.\n");
+    rc = ioctl(fd, EVIOCGBIT(0, sizeof (eventtypes)), eventtypes);
+    if (rc < 0) {
+        info("Failed to get input event types (%s).\n", strerror(errno));
         return;
     }
 
-    struct msg_input_config *msg;
-    int absposiblesize = NBITS(ABS_MAX) * sizeof(unsigned long);
-    int relposiblesize = NBITS(REL_MAX) * sizeof(unsigned long);
-    int evbits = (uint32_t) eventtypes[0];
-    int abssize = (evbits & (1 << EV_ABS)) ? absposiblesize : 0;
-    int relsize = (evbits & (1 << EV_REL)) || is_touchpad ? relposiblesize : 0;
-    int btnsize = (evbits & (1 << EV_KEY)) ? BTN_WORDS * sizeof(unsigned long) : 0;
+    memset(eventtypes, 0, sizeof (eventtypes));
+    memset(abslimits, 0, sizeof (abslimits));
+    memset(rellimits, 0, sizeof (rellimits));
+    memset(keylimits, 0, sizeof (keylimits));
 
-    unsigned long keybit[NBITS(KEY_OK)];
-    unsigned long absbit[NBITS(ABS_MAX)];
-    unsigned long relbit[NBITS(REL_MAX)];
-    unsigned long *btnbit = &(keybit[NBITS(BTN_MISC)]);
-    memset(absbit, 0, absposiblesize);
-
-
-    if (abssize)
-    {
-        if (is_touchpad)
-        {
-            absbit[0] |= ((1 << ABS_Y) | (1 << ABS_X));        
+    /* Absolute event types. */
+    if (TEST_BIT(EV_ABS, eventtypes)) {
+        switch (type) {
+            case HID_TYPE_TOUCHPAD:
+                /* Touchpads are forced with only ABS_{X,Y}. */
+                BIT_SET(ABS_X, abslimits);
+                BIT_SET(ABS_Y, abslimits);
+                break;
+            default:
+                rc = ioctl(fd, EVIOCGBIT(EV_ABS, sizeof (abslimits)), abslimits);
+                if (rc < 0) {
+                    info("Failed to get absolute events limits (%s).\n",
+                         strerror(errno));
+                    BIT_CLR(EV_ABS, eventtypes);
+                    break;
+                }
+                /* ABS_MT_POSITION_{X,Y} implies no ABS_{X,Y}? */
+                if (TEST_BIT(ABS_MT_POSITION_X, abslimits))
+                    BIT_CLR(ABS_X, abslimits);
+                if (TEST_BIT(ABS_MT_POSITION_Y, abslimits))
+                    BIT_CLR(ABS_Y, abslimits);
+                for (i = 0; i < ARRAY_LEN(abslimits) && abslimits[i]; ++i)
+                    continue;
+                /* Remove EV_ABS is no absolute event is supported. */
+                if (i >= ARRAY_LEN(abslimits))
+                    BIT_CLR(EV_ABS, eventtypes);
+                break;
         }
-             else  if ((ret = ioctl(fd, EVIOCGBIT(EV_ABS, abssize), absbit)) < 0)
-        {
-            info("Error: Could not get abs bits.\n");
-            abssize = 0;
+    }
+    /* Relative event types. */
+    if (TEST_BIT(EV_REL, eventtypes)) {
+        switch (type) {
+            case HID_TYPE_TOUCHPAD:
+                /* Touchpads are forced with only REL_WHEEL. */
+                BIT_SET(REL_WHEEL, rellimits);
+                break;
+            default:
+                rc = ioctl(fd, EVIOCGBIT(EV_REL, sizeof (rellimits)), rellimits);
+                if (rc < 0) {
+                    info("Failed to get relative events limits (%s).\n",
+                         strerror(errno));
+                    BIT_CLR(EV_REL, eventtypes);
+                    break;
+                }
+                /* Expose REL_{X,Y} as ABS_{X,Y}, input will convert relative
+                 * events to absolute before sending them to QEMU.*/
+                if (TEST_BIT(REL_X, rellimits) && TEST_BIT(REL_Y, rellimits)) {
+                    BIT_SET(ABS_X, abslimits);
+                    BIT_SET(ABS_Y, abslimits);
+                    BIT_CLR(REL_X, rellimits);
+                    BIT_CLR(REL_Y, rellimits);
+                }
+                for (i = 0; i < ARRAY_LEN(rellimits) && rellimits[i]; ++i)
+                    continue;
+                /* Remove EV_REL is no relative event is supported. */
+                if (i >= ARRAY_LEN(rellimits))
+                    BIT_CLR(EV_REL, eventtypes);
+                break;
         }
-        else
-        {
-            fixabsbits((uint64_t *) absbit);
+    }
+    /* Key events. */
+    if (TEST_BIT(EV_KEY, eventtypes)) {
+        rc = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof (keylimits)), keylimits);
+        if (rc < 0) {
+            info("Failed to get key events limits (%s).\n", strerror(errno));
+            BIT_CLR(EV_KEY, eventtypes);
+        } else {
+            /* Remove "unsupported" buttons, this is fairly arbitrary. */
+            /* [BTN_MISC:BTN_MOUSE-1] ([BTN_0:BTN_9]). */
+            for (i = BTN_MISC; i < BTN_MOUSE; ++i)
+                BIT_CLR(i, keylimits);
+            /* Arguably, this should be done too with BTN_{JOYSTICK,GAMEPAD}. */
+            for (i = BTN_JOYSTICK; i < BTN_WHEEL; ++i)
+                BIT_CLR(i, keylimits);
+            /* BTN_TOUCH is removed to handle multitouch devices? */
+            BIT_CLR(BTN_TOUCH, keylimits);
+
+            for (i = 0; i < ARRAY_LEN(keylimits) && keylimits[i]; ++i)
+                continue;
+            /* Remove EV_REL is no relative event is supported. */
+            if (i >= ARRAY_LEN(rellimits))
+                BIT_CLR(EV_REL, eventtypes);
         }
     }
 
-    if (relsize)
-    {
-        if (is_touchpad)
-        {
-           relbit[0] = 1 << REL_WHEEL; 
-        }
-        else if ((ret = ioctl(fd, EVIOCGBIT(EV_REL, relsize), relbit)) < 0)
-        {
-            info("Error: Could not get rel bits.\n");
-            relsize = 0;
-        }
-        else
-        {
-            if (relbits_to_absbits(d, relbit, (uint64_t *) absbit))
-            {
-                info("Making relative mouse absolute.\n");
+    msg_size = sizeof (*msg)
+        + !!TEST_BIT(EV_ABS, eventtypes) * sizeof (abslimits)
+        + !!TEST_BIT(EV_REL, eventtypes) * sizeof (rellimits)
+        + !!TEST_BIT(EV_KEY, eventtypes) * sizeof (keylimits)
+        - sizeof (uint32_t);
+    msg = calloc(1, msg_size);
+    if (!msg)
+        fatal("calloc: %s.\n", strerror(errno));
 
-                abssize = absposiblesize;
-            }
-            if (relbit[0] == 0)
-            {
-                info("All rel bits removed.\n");
-                relsize = 0;
-            }
-
-        }
-    }
-
-
-    /* Ugly fix instead of cast to uint64_t */
-    if (absbit[0] == 0)
-        abssize = 0;
-
-
-    if (btnsize)
-    {
-        if ((ret = ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keybit)), keybit)) < 0)
-        {
-            info("Error: Could not get button bits.\n");
-            btnsize = 0;
-        }
-        else
-        {
-            fixkeybits(btnbit, (uint64_t *) absbit, slot);
-            int any = anyset(btnbit);
-            if (!any)
-            {
-                info("Keys reported, but not in range.\n");
-                btnsize = 0;
-            }
-        }
-    }
-
-
-    int totalsize = abssize + relsize + btnsize + sizeof(struct msg_input_config) - sizeof(uint32_t);
-
-    msg = alloca(totalsize);
-
-    // Fill in structure
-
+    /* evbits is a uint32_t, it is enough for EV_MAX, but types... */
     msg->c.evbits =
-        (evbits & 1) | ((abssize) ? (1 << EV_ABS) : 0) | ((relsize) ? (1 << EV_REL) : 0) | ((btnsize) ? (1 << EV_KEY) :
-                                                                                            0);
+        (!!TEST_BIT(EV_ABS, eventtypes) << EV_ABS) |
+        (!!TEST_BIT(EV_REL, eventtypes) << EV_REL) |
+        (!!TEST_BIT(EV_KEY, eventtypes) << EV_KEY);
     msg->c.slot = slot;
 
-    uint8_t *payload = (uint8_t *) msg->c.bits;
+    /* Device name, make one up if unavailable. */
+    rc = ioctl(fd, EVIOCGNAME(sizeof (msg->c.name)), msg->c.name);
+    if (rc < 0)
+        snprintf(msg->c.name, sizeof (msg->c.name), "S:%d T:%d",
+                 slot, (int)type);
+    msg->c.name[sizeof (msg->c.name) - 1] = '\0';
 
-    if (ioctl(fd, EVIOCGNAME(sizeof(msg->c.name)), msg->c.name) == -1)
-    {
-        sprintf(msg->c.name, "S:%d T:%d", slot, input_dev.types[slot]);
+    /* Add limits bitfields. */
+    raw = (void*)&msg->c.bits[0];
+    if (TEST_BIT(EV_ABS, eventtypes)) {
+        memcpy(raw, abslimits, sizeof (abslimits));
+        raw += sizeof (abslimits);
     }
-    msg->c.name[sizeof(msg->c.name) - 1] = 0;
-    info("Found device: %s\n", msg->c.name);
-
-    if (abssize)
-    {
-#ifdef debug
-        print_abs_bit_meaning((unsigned long *) absbit);
-#endif
-        memcpy(payload, absbit, abssize);
-        payload += abssize;
+    if (TEST_BIT(EV_REL, eventtypes)) {
+        memcpy(raw, rellimits, sizeof (rellimits));
+        raw += sizeof (rellimits);
     }
-    if (relsize)
-    {
-#ifdef debug
-        print_rel_bit_meaning((unsigned long *) relbit);
-#endif
-        memcpy(payload, relbit, relsize);
-        payload += relsize;
+    if (TEST_BIT(EV_KEY, eventtypes)) {
+        memcpy(raw, keylimits, sizeof (keylimits));
+        raw += sizeof (keylimits);
     }
-
-    if (btnsize)
-    {
-#ifdef debug
-        print_btn_bit_meaning(btnbit);
-#endif
-        memcpy(payload, btnbit, btnsize);
-    }
-
-    input_config(d->client, msg, totalsize);
+    /* Send to QEMU. */
+    input_config(d->client, msg, msg_size);
+    free(msg);
 }
 
 static void send_slot(struct domain *d)

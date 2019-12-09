@@ -96,7 +96,9 @@
 #define NBITS(x) (((x) + LONG_BITS - 1) / LONG_BITS)
 #define OFF(x)   ((x) % LONG_BITS)
 #define LONG(x)  ((x) / LONG_BITS)
-#define TEST_BIT(bit, array) (array[LONG(bit)] & (1 << OFF(bit)))
+#define TEST_BIT(bit, array) ((array)[LONG(bit)] & (1UL << OFF(bit)))
+#define BIT_SET(bit, array) ((array)[LONG(bit)] |= (1UL << OFF(bit)))
+#define BIT_CLR(bit, array) ((array)[LONG(bit)] &= ~(1UL << OFF(bit)))
 #define ARRAY_LEN(arr) (sizeof (arr) / sizeof ((arr)[0]))
 
 #define BTN_WORDS 3
